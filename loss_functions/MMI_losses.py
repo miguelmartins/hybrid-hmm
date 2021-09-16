@@ -2,6 +2,8 @@ import tensorflow as tf
 from tensorflow.python.keras.backend import epsilon
 from tensorflow.python.keras.losses import Loss
 
+from models.processing_layers import get_averaged_predictions
+
 EPSILON = tf.constant(1e-12, dtype=tf.float32)
 
 
@@ -32,11 +34,6 @@ class AveragedMMILoss(Loss):
 
     _forward_backward(y_pred)
         The forward algorithm that returns P(O|Model)
-
-    _get_averaged_prediction(target, y_pred, patch_size=64, stride=8, num_classes=4)
-        computes the overlapping window average and returns predictions
-
-
     """
 
     def __init__(self, trans_mat, p_states):
@@ -61,7 +58,7 @@ class AveragedMMILoss(Loss):
         tf.Variable
             The negative MMI value for optimization
         """
-        y_pred_ = self._get_averaged_prediction(y_true, y_pred)
+        y_pred_ = get_averaged_predictions(y_true, y_pred)
         classes = tf.argmax(y_true, axis=1)
         outputs = tf.reduce_max(y_true[1:] * y_pred_[1:], axis=1)
         states = tf.reduce_max(self.p_states * y_true[1:], axis=1)
@@ -78,50 +75,6 @@ class AveragedMMILoss(Loss):
         loss = -(log_p_os - log_p_o)
 
         return loss
-
-    @staticmethod
-    def _get_averaged_prediction(target, y_pred, patch_size=64, stride=8, num_classes=4):
-        """
-        Computes the average predictions per overlapping windows
-
-        Parameters
-        ----------
-        y_true : tf.Tensor
-            The tensor of one-hot-encoded ground-truth
-        y_pred : tf.Tensor
-            The tensor of the output layer of a DNN
-
-        Returns
-        -------
-        tf.Variable
-            The negative MMI value for optimization
-        """
-        length = tf.shape(target)[0]
-
-        # Compute the indices were the windows start and end
-        start = tf.range(start=0, limit=length - patch_size, delta=stride)
-        end = tf.range(start=patch_size, limit=length, delta=stride)
-        cond = (length - patch_size) % stride > 0  # condition for squeezing the last window
-        if cond:
-            last_window_start, last_window_end = length - patch_size, length
-            start = tf.pad(start, [[0, 1]], constant_values=last_window_start)
-            end = tf.pad(end, [[0, 1]], constant_values=last_window_end)
-
-        cum_sum = tf.zeros(shape=[length, num_classes], dtype=tf.float32)
-        overlapping_windows = tf.zeros(shape=[length], dtype=tf.float32)
-        for i in range(tf.shape(y_pred)[0]):
-            # pad the indices that are not in the window and add the window value to the sum
-            cum_sum = cum_sum + tf.cast(tf.pad(y_pred[i], paddings=[[start[i], length - end[i]], [0, 0]]),
-                                        dtype=tf.float32)
-            # add a mask of LENGTH zeros with PATCH_SIZE ones where the window is defined
-            # thus memorizing the number of windows that contribute to a prediction
-            overlapping_windows = overlapping_windows + tf.pad(
-                tf.ones(shape=[patch_size]), paddings=[[start[i], length - end[i]]]
-            )
-
-        # Compute the final average. Transpose operations used to make it broadcastable
-        logits = tf.transpose(tf.transpose(cum_sum) / overlapping_windows)
-        return logits
 
     def _forward_backward(self, y_pred):
         """
@@ -226,7 +179,6 @@ class MMILoss(Loss):
         classes = tf.argmax(y_true, axis=1)
         outputs = tf.reduce_max(y_true[1:] * y_pred[1:], axis=1)
         states = tf.reduce_max(self.p_states * y_true[1:], axis=1)
-        tf.print("classes", tf.shape(classes), "outputs", tf.shape(outputs), "states", tf.shape(states))
         transitions_ = tf.tensordot(self.trans_mat + EPSILON, tf.transpose(y_true[1:]), axes=1)
         tf_time = tf.range(0, tf.shape(classes)[0], 1, dtype=tf.int64)
         full_indices = tf.stack([classes[:-1], tf_time[:-1]], axis=1)
@@ -319,6 +271,7 @@ class MMILossUnet(Loss):
     _forward_backward(y_pred)
         The forward algorithm that returns P(O|Model)
     """
+
     def __init__(self, trans_mat, p_states):
         super().__init__()
         self.trans_mat = trans_mat
