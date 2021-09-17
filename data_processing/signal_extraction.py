@@ -12,10 +12,11 @@ class DataExtractor:
         raw_patient_ids = data['Number_cell']
 
         # remove sounds shorter than patch size (and record sound indexes)
+        length_sounds = np.array([len(raw_features[j]) for j in range(len(raw_features))])
         valid_indices = np.array([j for j in range(len(raw_features)) if len(raw_features[j]) >= patch_size])
 
         features = raw_features[valid_indices]
         labels = raw_labels[valid_indices]
         patient_ids = raw_patient_ids[valid_indices]
 
-        return valid_indices, features, labels, patient_ids
+        return valid_indices, features, labels, patient_ids, length_sounds
