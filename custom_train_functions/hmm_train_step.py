@@ -1,5 +1,7 @@
 import tensorflow as tf
 import numpy as np
+
+from models.processing_layers import get_averaged_predictions
 from utility_functions.canonical_simplex import simplex_projection
 
 
@@ -232,7 +234,7 @@ def hmm_train_step(*, model, optimizer, train_batch, label_batch, loss_object, m
     return loss_value
 
 
-def hmm_train_step_nn_only(*, model, optimizer, train_batch, label_batch, loss_object, metrics):
+def hmm_train_step_nn_only(*, model, optimizer, train_batch, label_batch, loss_object, metrics, window=False):
     """
     Calculates the gradient according to some provided loss instance and applies it
     only to the DNN parameters using a projected gradient descent
@@ -264,7 +266,9 @@ def hmm_train_step_nn_only(*, model, optimizer, train_batch, label_batch, loss_o
     if metrics is not None and len(metrics) > 0:
         for metric in metrics:
             try:
-                metric(logits, label_batch)
+                if window:
+                    logits = get_averaged_predictions(label_batch, logits)
+                metric.update_state(logits, label_batch)
             except:
                 metric(loss_value)
 
