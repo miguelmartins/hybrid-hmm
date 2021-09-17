@@ -46,6 +46,50 @@ class PCGDataPreparer:
                 yield s.astype('float32'), l.astype('float32')
 
 
+class IndexedPCGDataPreparer(PCGDataPreparer):
+    def __init__(self, patch_size, stride, number_channels, num_states=4):
+        super().__init__(patch_size, stride, number_channels, num_states)
+
+    def __call__(self):
+        num_observations = len(self.labels)
+        for obs_idx in range(num_observations):
+            sound_ = self.features[obs_idx]
+            label = self.labels[obs_idx] - 1
+            one_hot_label = np.zeros((len(label), self.num_states))
+            for state in range(self.num_states):
+                one_hot_label[:, state] = (label == state).astype(int)
+
+            sound, _ = self._split_PCG_features(sound_, one_hot_label)
+            yield sound, one_hot_label
+
+    def get_averaged_prediction(self, target, y_pred):
+        length = int(round(len(target)))
+        number_patches = int((length - self.patch_size) / self.stride) + 1
+        if (length - self.patch_size) % self.stride > 0:
+            number_patches = int(round(number_patches + 1))
+
+        p_index = 0
+        logits = np.zeros((number_patches, length, self.num_states))
+        for i in range(int((length - self.patch_size) / self.stride) + 1):
+            logits[i, i * self.stride:i * self.stride + self.patch_size, :] = y_pred[p_index, :, :]
+            p_index += 1
+
+        if (length - self.patch_size) % self.stride > 0:
+            logits[number_patches - 1, length - self.patch_size:length, :] = y_pred[p_index, :, :]
+            p_index += 1
+
+        logits = np.sum(logits, axis=0)
+
+        prob_sum = np.sum(logits, axis=1)
+        prob_sum = np.tile(prob_sum, (4, 1))
+        prob_sum = np.transpose(prob_sum)
+
+        logits = np.divide(logits, prob_sum)
+        predictions = np.argmax(logits, axis=1)
+
+        return logits, predictions
+
+
 class HybridPCGDataPreparer(PCGDataPreparer):
     def __init__(self, patch_size, number_channels, num_states=4):
         super().__init__(patch_size, 0, number_channels, num_states)
