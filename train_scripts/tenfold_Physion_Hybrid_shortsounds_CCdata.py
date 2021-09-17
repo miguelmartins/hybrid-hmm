@@ -18,13 +18,13 @@ from utility_functions.hmm_utilities import log_viterbi_no_marginal
 def main():
     patch_size = 64
     nch = 4
-    num_epochs = 2
+    num_epochs = 1
     number_folders = 10
     learning_rate = 1e-4
 
-    good_indices, features, labels, patient_ids = DataExtractor.extract(path='../datasets/PCG'
-                                                                             '/PhysioNet_SpringerFeatures_Annotated_featureFs_50_Hz_audio_ForPython.mat',
-                                                                        patch_size=patch_size)
+    good_indices, features, labels, patient_ids, length_sounds = DataExtractor.extract(path='../datasets/PCG'
+                                                                                            '/PhysioNet_SpringerFeatures_Annotated_featureFs_50_Hz_audio_ForPython.mat',
+                                                                                       patch_size=patch_size)
     experiment_logger = PCGExperimentLogger(path='../results/hybrid', name='hmm_nn', number_folders=number_folders)
     print('Total number of valid sounds with length > ' + str(patch_size / 50) + ' seconds: ' + str(len(good_indices)))
     # 1) save files on a given directory, maybe experiment-name/date/results

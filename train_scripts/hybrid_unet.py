@@ -19,6 +19,7 @@ from utility_functions.hmm_utilities import log_viterbi_no_marginal
 from utility_functions.metrics import get_metrics
 from tensorflow.keras.utils import Progbar
 
+
 def main():
     patch_size = 64
     stride = 8
@@ -31,10 +32,9 @@ def main():
     dp = PCGDataPreparer(patch_size=patch_size, stride=stride, number_channels=nch, num_states=4)
     dp_dev = PCGDataPreparer(patch_size=patch_size, stride=stride, number_channels=nch, num_states=4)
 
-    good_indices, features, labels, patient_ids = DataExtractor.extract(path='../datasets/PCG'
-                                                                             '/PhysioNet_SpringerFeatures_Annotated_featureFs_50_Hz_audio_ForPython.mat',
-                                                                        patch_size=patch_size)
-    length_sounds = np.array([len(features[j]) for j in range(len(features))])
+    good_indices, features, labels, patient_ids, length_sounds = DataExtractor.extract(path='../datasets/PCG'
+                                                                                            '/PhysioNet_SpringerFeatures_Annotated_featureFs_50_Hz_audio_ForPython.mat',
+                                                                                       patch_size=patch_size)
 
     print('Total number of valid sounds with length > ' + str(patch_size / 50) + ' seconds: ' + str(len(good_indices)))
 
@@ -47,7 +47,7 @@ def main():
     model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['categorical_accuracy'])
     model.save_weights('random_init_unet')
     loss_object = MMILossUnet(tf.Variable(tf.zeros((4, 4)), trainable=True, dtype=tf.float32),
-                          tf.Variable(tf.zeros((4,)), trainable=True, dtype=tf.float32))
+                              tf.Variable(tf.zeros((4,)), trainable=True, dtype=tf.float32))
 
     acc_folds, prec_folds = [], []
     for fold in range(number_folders):
@@ -114,7 +114,7 @@ def main():
         p_states, trans_mat = train_HMM_parameters(labels_)
         loss_object.trans_mat.assign(tf.Variable(trans_mat, trainable=True, dtype=tf.float32))
         loss_object.p_states.assign(tf.Variable(p_states, trainable=True, dtype=tf.float32))
-        train_dataset = train_dataset.shuffle(len(X_train), reshuffle_each_iteration=True)
+        # train_dataset = train_dataset.shuffle(len(X_train), reshuffle_each_iteration=True)
         for ep in range(EPOCHS):
             print('=', end='')
             pb_i = Progbar(None)
