@@ -157,23 +157,27 @@ def unet1d(*, number_channels, patch_size):
     return model
 
 
-def unet_pcg(nch, patch_size):
+def unet_pcg(nch, patch_size, dropout=0.0):
     inputs = Input(shape=(patch_size, nch))
     conv1 = Conv1D(8, 3, activation='relu', padding='same')(inputs)
     conv1 = Conv1D(8, 3, activation='relu', padding='same')(conv1)
     pool1 = MaxPooling1D(pool_size=2)(conv1)
+    pool1 = Dropout(dropout)(pool1)
 
     conv2 = Conv1D(16, 3, activation='relu', padding='same')(pool1)
     conv2 = Conv1D(16, 3, activation='relu', padding='same')(conv2)
     pool2 = MaxPooling1D(pool_size=2)(conv2)
+    pool2 = Dropout(dropout)(pool2)
 
     conv3 = Conv1D(32, 3, activation='relu', padding='same')(pool2)
     conv3 = Conv1D(32, 3, activation='relu', padding='same')(conv3)
     pool3 = MaxPooling1D(pool_size=2)(conv3)
+    pool3 = Dropout(dropout)(pool3)
 
     conv4 = Conv1D(64, 3, activation='relu', padding='same')(pool3)
     conv4 = Conv1D(64, 3, activation='relu', padding='same')(conv4)
     pool4 = MaxPooling1D(pool_size=2)(conv4)
+    pool4 = Dropout(dropout)(pool4)
 
     conv5 = Conv1D(128, 3, activation='relu', padding='same')(pool4)
     conv5 = Conv1D(128, 3, activation='relu', padding='same')(conv5)
@@ -182,6 +186,7 @@ def unet_pcg(nch, patch_size):
     # up6_prep=conv5
 
     up6 = concatenate([Conv1D(64, 2, padding='same')(up6_prep), conv4], axis=2)
+    up6 = Dropout(dropout)(up6)
     conv6 = Conv1D(64, 3, activation='relu', padding='same')(up6)
     conv6 = Conv1D(64, 3, activation='relu', padding='same')(conv6)
 
@@ -189,6 +194,7 @@ def unet_pcg(nch, patch_size):
     # up7_prep=conv6
 
     up7 = concatenate([Conv1D(64, 2, padding='same')(up7_prep), conv3], axis=2)
+    up7 = Dropout(dropout)(up7)
     conv7 = Conv1D(32, 3, activation='relu', padding='same')(up7)
     conv7 = Conv1D(32, 3, activation='relu', padding='same')(conv7)
 
@@ -196,6 +202,7 @@ def unet_pcg(nch, patch_size):
     # up8_prep = conv7
 
     up8 = concatenate([Conv1D(32, 2, padding='same')(up8_prep), conv2], axis=2)
+    up8 = Dropout(dropout)(up8)
     conv8 = Conv1D(16, 3, activation='relu', padding='same')(up8)
     conv8 = Conv1D(16, 3, activation='relu', padding='same')(conv8)
 
@@ -203,6 +210,7 @@ def unet_pcg(nch, patch_size):
     # up9_prep=conv8
 
     up9 = concatenate([Conv1D(8, 2, padding='same')(up9_prep), conv1], axis=2)
+    up9 = Dropout(dropout)(up9)
     conv9 = Conv1D(8, 3, activation='relu', padding='same')(up9)
     conv9 = Conv1D(8, 3, activation='tanh', padding='same')(conv9)
 
