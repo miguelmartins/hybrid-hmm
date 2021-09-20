@@ -3,7 +3,7 @@ import numpy as np
 import datetime
 
 from sklearn.metrics import accuracy_score, precision_score
-from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.optimizers import Adam, Nadam, RMSprop
 from sklearn.model_selection import train_test_split
 
 from custom_train_functions.hmm_train_step import train_HMM_parameters, hmm_train_step_nn_only
@@ -12,7 +12,6 @@ from loss_functions.MMI_losses import AveragedMMILoss
 from models.custom_models import unet_pcg
 from data_processing.data_transformation import PCGDataPreparer, HybridPCGDataPreparer, \
     unet_prepare_validation_data, get_data_from_generator, get_train_test_indices, IndexedPCGDataPreparer
-from models.processing_layers import get_averaged_predictions
 from utility_functions.experiment_logs import PCGExperimentLogger
 from utility_functions.hmm_utilities import log_viterbi_no_marginal
 from utility_functions.metrics import get_metrics
@@ -130,11 +129,10 @@ def main():
         loss_object.trans_mat.assign(tf.Variable(trans_mat, trainable=True, dtype=tf.float32))
         loss_object.p_states.assign(tf.Variable(p_states, trainable=True, dtype=tf.float32))
         train_dataset = train_dataset.shuffle(len(X_train), reshuffle_each_iteration=True)
-        avg_loss = []
-
         for ep in range(EPOCHS):
             print('=', end='')
             pb_i = Progbar(None)
+            avg_loss = []
             for (x_train, y_train) in train_dataset:
                 # write train loop with given y pred
                 # write evaluation function
@@ -146,8 +144,8 @@ def main():
                                               metrics=[train_accuracy],
                                               window=True)
                 avg_loss.append(loss)
-
                 pb_i.add(1)
+
             with train_summary_writer.as_default():
                 tf.summary.scalar('accuracy', train_accuracy.result(), step=ep)
             template = ' Epoch {}, Loss: {} Accuracy: {}'
