@@ -6,7 +6,7 @@ from sklearn.metrics import accuracy_score, precision_score
 from tensorflow.keras.optimizers import Adam, Nadam, RMSprop
 from sklearn.model_selection import train_test_split
 
-from custom_train_functions.hmm_train_step import train_HMM_parameters, hmm_train_step_nn_only
+from custom_train_functions.hmm_train_step import train_HMM_parameters, hmm_train_step_nn_only, hmm_train_step
 from data_processing.signal_extraction import DataExtractor
 from loss_functions.MMI_losses import AveragedMMILoss
 from models.custom_models import unet_pcg
@@ -136,7 +136,7 @@ def main():
             for (x_train, y_train) in train_dataset:
                 # write train loop with given y pred
                 # write evaluation function
-                loss = hmm_train_step_nn_only(model=model,
+                loss = hmm_train_step(model=model,
                                               optimizer=optimizer,
                                               train_batch=x_train,
                                               label_batch=y_train,
