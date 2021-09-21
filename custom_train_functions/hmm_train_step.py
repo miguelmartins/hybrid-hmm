@@ -187,7 +187,7 @@ def hmm_train_step_multi_opt(*, model, optimizer_nn, optimizer_hmm, train_batch,
     return loss_value
 
 
-def hmm_train_step(*, model, optimizer, train_batch, label_batch, loss_object, metrics):
+def hmm_train_step(*, model, optimizer, train_batch, label_batch, loss_object, metrics, window=False):
     """
     Calculates the gradient according to some provided loss instance and applies it
     to both the HMM and DNN parameters using a projected gradient descent that guarantees
@@ -227,7 +227,9 @@ def hmm_train_step(*, model, optimizer, train_batch, label_batch, loss_object, m
     if metrics is not None and len(metrics) > 0:
         for metric in metrics:
             try:
-                metric(logits, label_batch)
+                if window:
+                    logits = get_averaged_predictions(label_batch, logits)
+                metric.update_state(logits, label_batch)
             except:
                 metric(loss_value)
 
