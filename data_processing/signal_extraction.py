@@ -19,7 +19,15 @@ class DataExtractor:
         for recording in data:
             time_secs = len(recording) / original_rate
             number_of_samples = int(time_secs * new_rate)
-            downsampled_data.append(scipy.signal.resample(recording, number_of_samples))
+
+            # Apply high-pass and low pass order 2 Butterworth filters with respective 25 and 400 Hz cut-offs
+            sos_hp = scipy.signal.butter(N=2, Wn=25, btype='highpass', analog=False, fs=1000, output='sos')
+            sos_lp = scipy.signal.butter(N=2, Wn=400, btype='lowpass', analog=False, fs=1000, output='sos')
+            filtered = scipy.signal.sosfilt(sos_hp, recording)
+            filtered = scipy.signal.sosfilt(sos_lp, filtered)
+
+            # downsample from the filtered signal
+            downsampled_data.append(scipy.signal.resample(filtered, number_of_samples))
         return np.array(downsampled_data)
 
     @staticmethod
