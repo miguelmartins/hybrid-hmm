@@ -1,8 +1,26 @@
 import numpy as np
 import scipy.io as sio
+import scipy.signal
 
 
 class DataExtractor:
+    @staticmethod
+    def read_physionet_mat(file_path):
+        mat = sio.loadmat(file_path)  # load mat-file
+        mdata = mat['example_data']  # variable in mat file
+        ndata = {n: mdata[n][0, 0] for n in mdata.dtype.names}
+        pcg_recordings = ndata['example_audio_data'].squeeze()
+        patient_ids = ndata['patient_number'].squeeze()
+        return pcg_recordings, patient_ids
+
+    @staticmethod
+    def downsample_signal(data, original_rate=1000, new_rate=50):
+        downsampled_data = []
+        for recording in data:
+            time_secs = len(recording) / original_rate
+            number_of_samples = int(time_secs * new_rate)
+            downsampled_data.append(scipy.signal.resample(recording, number_of_samples))
+        return np.array(downsampled_data)
 
     @staticmethod
     def extract(path, patch_size):
