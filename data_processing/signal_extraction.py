@@ -38,7 +38,7 @@ class DataExtractor:
                                           window=window_type,
                                           nperseg=window_length,
                                           noverlap=window_overlap)
-            psd_data[i] = psd
+            psd_data[i] = np.abs(psd)  # transform the signal from complex to real-valued
         return psd_data
 
     @staticmethod
