@@ -25,8 +25,9 @@ class DataExtractor:
 
     @staticmethod
     def get_power_spectrum(data, sampling_rate, window_length, window_overlap, window_type='hann'):
-        psd_data = []
-        for recording in data:
+        psd_data = np.zeros(data.shape, dtype=object)
+        for i in range(len(data)):
+            recording = data[i]
             # Apply high-pass and low pass order 2 Butterworth filters with respective 25 and 400 Hz cut-offs
             sos_hp = scipy.signal.butter(N=2, Wn=25, btype='highpass', analog=False, fs=sampling_rate, output='sos')
             sos_lp = scipy.signal.butter(N=2, Wn=400, btype='lowpass', analog=False, fs=sampling_rate, output='sos')
@@ -37,8 +38,8 @@ class DataExtractor:
                                           window=window_type,
                                           nperseg=window_length,
                                           noverlap=window_overlap)
-            psd_data.append(psd)
-        return np.array(psd_data)
+            psd_data[i] = psd
+        return psd_data
 
     @staticmethod
     def extract(path, patch_size):
@@ -56,3 +57,7 @@ class DataExtractor:
         patient_ids = raw_patient_ids[valid_indices]
 
         return valid_indices, features, labels, patient_ids, length_sounds
+
+    @staticmethod
+    def filter_by_index(processed_features, indices):
+        return processed_features[indices]
