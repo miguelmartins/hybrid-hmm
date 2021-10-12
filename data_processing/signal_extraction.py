@@ -38,7 +38,16 @@ class DataExtractor:
                                           window=window_type,
                                           nperseg=window_length,
                                           noverlap=window_overlap)
-            psd_data[i] = np.abs(psd)  # transform the signal from complex to real-valued
+            # transform the signal from complex to real-valued
+            # Transpose to get the number of windows in first dimension to have the frequencies has a fixed
+            # dimension for the CNNs
+            psd = np.abs(psd).T
+
+            # PSD_norm(t,f) = PSD(t,f)/ A; A=sum_t=0^T-1 sum_f=0^F-1 PSD(t,f)/T => sum PSD_Norm(t,f) = T
+            length_psd = psd.shape[0]
+            normalization = np.sum(np.sum(psd, axis=0))
+            psd_data[i] = psd / (normalization / length_psd)
+
         return psd_data
 
     @staticmethod
