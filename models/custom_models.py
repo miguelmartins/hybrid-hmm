@@ -1,8 +1,11 @@
 import tensorflow as tf
-from tensorflow.python.keras import Input
-from tensorflow.python.keras.layers import Flatten, Dense, Dropout, Conv1D, MaxPooling1D, UpSampling1D, concatenate
-from tensorflow.python.keras.models import Model
+from tensorflow.keras.layers import MaxPooling2D, Conv2D
+from tensorflow.keras.layers import Input
+from tensorflow.keras.layers import Flatten, Dense, Dropout, Conv1D, MaxPooling1D, UpSampling1D, concatenate
+from tensorflow.keras.models import Model
 
+
+# TODO: check imports to avoid lambda layers
 
 def vgg16_fine_tune(num_classes, input_shape=(224, 224, 3)):
     vgg_model = tf.keras.applications.VGG16(
@@ -239,6 +242,25 @@ def simple_convnet(nch, patch_size):
     pool2 = MaxPooling1D(pool_size=2)(conv2)
     conv3 = Conv1D(32, 3, activation='relu', padding='same')(pool2)
     pool3 = MaxPooling1D(pool_size=2)(conv3)
+
+    dense_in = Flatten()(pool3)
+    drop_in = Dropout(0.25)(dense_in)
+    dense1 = Dense(64, activation='relu')(drop_in)
+    dense3 = Dense(4, activation='softmax')(dense1)
+
+    model = Model(inputs=[inputs], outputs=[dense3])
+    model.summary()
+    return model
+
+
+def simple_convnet2d(nch, patch_size):
+    inputs = Input(shape=(patch_size, nch, 1))
+    conv1 = Conv2D(8, 3, activation='relu', padding='same')(inputs)
+    pool1 = MaxPooling2D(pool_size=2)(conv1)
+    conv2 = Conv2D(16, 3, activation='relu', padding='same')(pool1)
+    pool2 = MaxPooling2D(pool_size=2)(conv2)
+    conv3 = Conv2D(32, 3, activation='relu', padding='same')(pool2)
+    pool3 = MaxPooling2D(pool_size=2)(conv3)
 
     dense_in = Flatten()(pool3)
     drop_in = Dropout(0.25)(dense_in)
