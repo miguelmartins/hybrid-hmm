@@ -1,4 +1,6 @@
 import datetime
+import pickle
+
 import numpy as np
 from pathlib import Path
 import scipy.io as sio
@@ -18,9 +20,17 @@ class PCGExperimentLogger:
         self.path = name_
         self.last_checkpoint = None
 
-    def save_model_checkpoints(self, model, checkpoint_path):
-        self.last_checkpoint = self.path + '/' + checkpoint_path
+    def save_model_checkpoints(self, model, p_states, trans_mat, checkpoint_path, fold):
+        self.last_checkpoint = self.path + '/' + checkpoint_path + str(fold)
         model.save_weights(self.last_checkpoint)
+        _path = self.path + '/'
+        np.save(_path + 'p_states_fold_' + str(fold), p_states)
+        np.save(_path + 'trans_mat_fold_' + str(fold), trans_mat)
+
+    def save_markov_state(self, fold, p_states, trans_mat):
+        _path = self.path + '/'
+        np.save(_path + 'p_states_fold_' + str(fold), p_states)
+        np.save(_path + 'trans_mat_fold_' + str(fold), trans_mat)
 
     def load_model_checkpoint_weights(self, model):
         model.load_weights(self.last_checkpoint)
