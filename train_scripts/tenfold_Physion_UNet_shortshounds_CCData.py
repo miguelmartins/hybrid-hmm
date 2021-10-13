@@ -24,7 +24,7 @@ def main():
     nch = 4
     number_folders = 10
     learning_rate = 1e-4
-    EPOCHS = 1
+    EPOCHS = 2
     BATCH_SIZE = 1
 
     dp = PCGDataPreparer(patch_size=patch_size, stride=stride, number_channels=nch, num_states=4)
@@ -37,7 +37,7 @@ def main():
 
     # 10-fold cross validation
 
-    experiment_logger = PCGExperimentLogger(path='../results/unet', name='unet_only', number_folders=number_folders)
+    experiment_logger = PCGExperimentLogger(path='../results/unet', name='unet', number_folders=number_folders)
 
     model = unet_pcg(nch, patch_size)
     model.compile(optimizer=Adam(learning_rate=learning_rate), loss='categorical_crossentropy', metrics=['categorical_accuracy'])
@@ -107,15 +107,12 @@ def main():
 
         p_states, trans_mat = train_HMM_parameters(labels_)
 
-        #TODO: change this checkpoint
-
-        model_checkpoint = ModelCheckpoint(filepath=experiment_logger.path + '/weights.hdf5', monitor='val_loss', save_best_only=True)
-
+        checkpoint_path = experiment_logger.path + '/weights_fold' + str(fold) + '.hdf5'
+        model_checkpoint = ModelCheckpoint(filepath=checkpoint_path, monitor='val_loss', save_best_only=True)
         history = model.fit(train_dataset, validation_data=dev_dataset, validation_steps=1, epochs=EPOCHS, verbose=1,
                             shuffle=True, callbacks=[model_checkpoint])
-        # TODO: change this checkpoint maybe
-        model.save(experiment_logger.path + '/my_model.h5')  # creates a HDF5 file 'my_model.h5'
-
+        experiment_logger.save_markov_state(fold, p_states, trans_mat)
+        model.load_weights(checkpoint_path)
         # prediction on test data
         dp_test = PCGDataPreparer(patch_size=patch_size, stride=stride, number_channels=nch, num_states=4)
         dp_test.set_features_and_labels(features_test, labels_test)
