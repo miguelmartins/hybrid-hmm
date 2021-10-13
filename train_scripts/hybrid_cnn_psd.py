@@ -144,7 +144,8 @@ def main():
                 # SAVE MODEL
                 best_p_states = loss_object.p_states.numpy()
                 best_trans_mat = loss_object.trans_mat.numpy()
-                experiment_logger.save_model_checkpoints(model, '/cnn_weights_fold_' + str(j_fold))
+                experiment_logger.save_model_checkpoints(model, best_p_states, best_trans_mat, '/cnn_weights_fold_',
+                                                         j_fold)
 
         model = experiment_logger.load_model_checkpoint_weights(model)
         loss_object.p_states.assign(tf.Variable(best_p_states, trainable=True, dtype=tf.float32))
