@@ -18,7 +18,7 @@ from utility_functions.hmm_utilities import log_viterbi_no_marginal
 def main():
     patch_size = 64
     nch = 76
-    num_epochs = 10
+    num_epochs = 50
     number_folders = 10
     learning_rate = 1e-3
 
@@ -153,7 +153,7 @@ def main():
         out_test = model.predict(test_dataset)
         accuracy, precision = [], []
 
-        labels_list, predictions_list = [], []
+        labels_list, cnn_list, predictions_list = [], [], []
         print(loss_object.p_states.numpy())
         print(loss_object.trans_mat.numpy())
         acc_cnn = []
@@ -165,6 +165,7 @@ def main():
                                                         logits)
             predictions = predictions.astype(np.int32)
             cnn_preds = np.argmax(logits, axis=1)
+            cnn_list.append(cnn_preds)
             raw_labels = np.argmax(y, axis=1).astype(np.int32)
             predictions_list.append(predictions)
             labels_list.append(raw_labels)
@@ -173,31 +174,16 @@ def main():
             prc = precision_score(raw_labels, predictions, average=None)
             accuracy.append(acc)
             precision.append(prc)
-        print("Mean Test Accuracy: ", np.mean(accuracy), "Mean Test Precision: ", np.mean(precision))
-        print("CNN mean preds", np.mean(acc_cnn))
+        print("CNN-> Average Accuracy", np.mean(acc_cnn))
+        print("Viterbi-> Mean Test Accuracy: ", np.mean(accuracy), "Mean Test Precision: ", np.mean(precision))
         acc_folds.append(np.mean(acc))
         prec_folds.append(np.mean(prc))
-        length_sounds_test = np.zeros(len(features_test))
-        for j in range(len(features_test)):
-            length_sounds_test[j] = len(features_test[j])
-
-        # recover sound labels from patch labels
-        output_probs, output_seqs = prepare_validation_data(out_test, test_indices, length_sounds_test)
-        sample_acc = np.zeros((len(labels_test),))
-        for j in range(len(labels_test)):
-            sample_acc[j] = 1 - (np.sum((output_seqs[j] != labels_test[j] - 1)) / len(labels_test[j]))
-
-        print('Test mean sample accuracy for this folder:', np.sum(sample_acc) / len(sample_acc))
-        for j in range(len(labels_test)):
-            sample_acc[j] = 1 - (
-                    np.sum((predictions_list[j] != labels_test[j] - 1).astype(int)) / len(labels_test[j]))
-        print("Viterbi: ", np.sum(sample_acc) / len(sample_acc))
 
         # collecting data and results
         experiment_logger.update_results(fold=j_fold,
                                          train_indices=train_indices,
                                          test_indices=test_indices,
-                                         output_seqs=output_seqs,
+                                         output_seqs=np.array(cnn_list, dtype=object),
                                          predictions=np.array(predictions_list, dtype=object),
                                          ground_truth=np.array(labels_list, dtype=object))
 
