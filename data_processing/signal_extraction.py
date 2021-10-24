@@ -1,6 +1,8 @@
+import librosa
 import numpy as np
 import scipy.io as sio
 import scipy.signal
+from sklearn.preprocessing import scale
 
 
 class DataExtractor:
@@ -49,6 +51,23 @@ class DataExtractor:
             psd_data[i] = psd / (normalization / length_psd)
 
         return psd_data
+
+    @staticmethod
+    def get_mfccs(data, sampling_rate, window_length, window_overlap, n_mfcc, fmin=25, fmax=400):
+        mfcc_data = np.zeros(data.shape, dtype=object)
+        _hop_length = window_length - window_overlap
+        for i in range(len(data)):
+            recording = data[i]
+            mfcc = librosa.feature.mfcc(recording.squeeze(),
+                                        n_fft=window_length,
+                                        sr=sampling_rate,
+                                        hop_length=_hop_length,
+                                        n_mfcc=n_mfcc,
+                                        fmin=fmin,
+                                        fmax=fmax)
+            mfcc_data[i] = mfcc.T  # switch the time domain to the first dimension
+
+        return mfcc_data
 
     @staticmethod
     def extract(path, patch_size):
