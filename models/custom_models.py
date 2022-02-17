@@ -3,9 +3,36 @@ from tensorflow.keras.layers import MaxPooling2D, Conv2D
 from tensorflow.keras.layers import Input
 from tensorflow.keras.layers import Flatten, Dense, Dropout, Conv1D, MaxPooling1D, UpSampling1D, concatenate
 from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Layer
+from tensorflow.keras import backend as K
 
 
 # TODO: check imports to avoid lambda layers
+class Attention(Layer):
+    # implementation form:
+    # https://stackoverflow.com/questions/62948332/how-to-add-attention-layer-to-a-bi-lstm/62949137#62949137
+    def __init__(self, return_sequences=True):
+        self.return_sequences = return_sequences
+        super(Attention, self).__init__()
+
+    def build(self, input_shape):
+        self.W = self.add_weight(name="att_weight", shape=(input_shape[-1], 1),
+                                 initializer="normal")
+        self.b = self.add_weight(name="att_bias", shape=(input_shape[1], 1),
+                                 initializer="zeros")
+
+        super(Attention, self).build(input_shape)
+
+    def call(self, x):
+        e = K.tanh(K.dot(x, self.W) + self.b)
+        a = K.softmax(e, axis=1)
+        output = x * a
+
+        if self.return_sequences:
+            return output
+
+        return K.sum(output, axis=1)
+
 
 def vgg16_fine_tune(num_classes, input_shape=(224, 224, 3)):
     vgg_model = tf.keras.applications.VGG16(
@@ -268,5 +295,38 @@ def simple_convnet2d(nch, patch_size):
     dense3 = Dense(4, activation='softmax')(dense1)
 
     model = Model(inputs=[inputs], outputs=[dense3])
+    model.summary()
+    return model
+
+
+def simple_rnn(nch, patch_size):
+    inputs = Input(shape=(patch_size, nch))
+
+    # embedding = tf.keras.layers.Embedding(nch*patch_size, embedding_size) # TODO: Investigate if Fernando19 (2) equation is an embedding layer
+    x = tf.keras.layers.SimpleRNN(patch_size, return_sequences=True)(inputs)
+    dense = tf.keras.layers.TimeDistributed(Dense(4, activation='softmax'))(x)
+    model = Model(inputs=[inputs], outputs=[dense])
+    model.summary()
+    return model
+
+
+def simple_bilstm(nch, patch_size, unit_size=80):
+    inputs = Input(shape=(patch_size, nch))
+
+    x = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(unit_size, return_sequences=True))(inputs)
+    dense = tf.keras.layers.TimeDistributed(Dense(4, activation='softmax'))(x)
+    model = Model(inputs=[inputs], outputs=[dense])
+    model.summary()
+    return model
+
+
+def bilstm_attention_fernando19(nch, patch_size, unit_size=80):
+    inputs = Input(shape=(patch_size, nch))
+
+    x = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(unit_size, return_sequences=True))(inputs)
+    attention = Attention(return_sequences=True)(x)
+    dense = tf.keras.layers.TimeDistributed(Dense(4, activation='softmax')(attention))
+
+    model = Model(inputs=[inputs], outputs=[dense])
     model.summary()
     return model
