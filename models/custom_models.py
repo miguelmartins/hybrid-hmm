@@ -33,14 +33,14 @@ class Attention(Layer):
         return K.sum(output, axis=1)
 
 
-class SoftAttention(Layer):
+class SoftWindowedAttention(Layer):
     # Adapted form:
     # https://stackoverflow.com/questions/62948332/how-to-add-attention-layer-to-a-bi-lstm/62949137#62949137
     # to implementent the mechanism attention of:
     # "Hierarchical Attention Networks for Document Classification", Yang et al. 2016
     def __init__(self, return_sequences=True):
         self.return_sequences = return_sequences
-        super(SoftAttention, self).__init__()
+        super(SoftWindowedAttention, self).__init__()
 
     def build(self, input_shape):
         # input_shape = (None, patch_size, hidden_size)
@@ -52,12 +52,45 @@ class SoftAttention(Layer):
         self.v = self.add_weight(name="context_vector", shape=(input_shape[-1], 1),
                                  initializer="normal")  # patch_size
 
-        super(SoftAttention, self).build(input_shape)
+        super(SoftWindowedAttention, self).build(input_shape)
 
     def call(self, x):
         e = K.tanh(K.dot(x, self.W) + self.b)  # patch_size x 1
         a = K.softmax(K.dot(K.transpose(e), self.v), axis=1)  # path_size x 1
         output = x * a  # (path_size, hidden) * (patch_size x 1)
+
+        if self.return_sequences:
+            return output
+
+        return K.sum(output, axis=1)
+
+
+class SoftAttention(Layer):
+    # Adapted form:
+    # https://stackoverflow.com/questions/62948332/how-to-add-attention-layer-to-a-bi-lstm/62949137#62949137
+    # to implementent the mechanism attention of:
+    # "Heart Sound Segmentation Using Bidirectional LSTMs With Attention", Fernando et al. 2019
+    def __init__(self, return_sequences=True):
+        self.return_sequences = return_sequences
+        super(SoftAttention, self).__init__()
+
+    def build(self, input_shape):
+        # input_shape = (None, patch_size, hidden_size)
+        self.W = self.add_weight(name="att_weight", shape=(input_shape[-1], 1),
+                                 initializer="normal")  # hidden_size x 1
+        self.b = self.add_weight(name="att_bias", shape=(input_shape[1], 1),
+                                 initializer="zeros")  # patch_size
+
+        self.v = self.add_weight(name="context_vector", shape=(input_shape[-2], 1),
+                                 initializer="normal")  # patch_size
+
+        super(SoftAttention, self).build(input_shape)
+
+    def call(self, x):
+        e = K.tanh(K.dot(x, self.W) + self.b)  # patch_size x 1
+        s = K.dot(tf.keras.layers.Permute((2, 1))(e), self.v)  # Permute to transpose window for each time step
+        a = K.softmax(s, axis=1)  # path_size x 1
+        output = x * a
 
         if self.return_sequences:
             return output
@@ -335,7 +368,8 @@ def simple_rnn(nch, patch_size):
 
     # embedding = tf.keras.layers.Embedding(nch*patch_size, embedding_size) # TODO: Investigate if Fernando19 (2) equation is an embedding layer
     x = tf.keras.layers.SimpleRNN(patch_size, return_sequences=True)(inputs)
-    dense = tf.keras.layers.TimeDistributed(Dense(4, activation='softmax'))(x)
+    x = Flatten()(x)
+    dense = tf.keras.layers.Dense(4, activation='softmax')(x)
     model = Model(inputs=[inputs], outputs=[dense])
     model.summary()
     return model
