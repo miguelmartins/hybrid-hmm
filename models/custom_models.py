@@ -91,11 +91,10 @@ class SoftAttention(Layer):
         s = K.dot(tf.keras.layers.Permute((2, 1))(e), self.v)  # Permute to transpose window for each time step
         a = K.softmax(s, axis=1)  # path_size x 1
         output = x * a
-
         if self.return_sequences:
             return output
 
-        return K.sum(output, axis=1)
+        return K.sum(output, axis=2)
 
 
 def vgg16_fine_tune(num_classes, input_shape=(224, 224, 3)):
