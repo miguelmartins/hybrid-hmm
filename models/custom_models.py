@@ -27,6 +27,37 @@ class Attention(Layer):
         e = K.tanh(K.dot(x, self.W) + self.b)
         a = K.softmax(e, axis=1)
         output = x * a
+        if self.return_sequences:
+            return output
+
+        return K.sum(output, axis=1)
+
+
+class SoftAttention(Layer):
+    # Adapted form:
+    # https://stackoverflow.com/questions/62948332/how-to-add-attention-layer-to-a-bi-lstm/62949137#62949137
+    # to implementent the mechanism attention of:
+    # "Hierarchical Attention Networks for Document Classification", Yang et al. 2016
+    def __init__(self, return_sequences=True):
+        self.return_sequences = return_sequences
+        super(SoftAttention, self).__init__()
+
+    def build(self, input_shape):
+        # input_shape = (None, patch_size, hidden_size)
+        self.W = self.add_weight(name="att_weight", shape=(input_shape[-1], 1),
+                                 initializer="normal")  # hidden_size x 1
+        self.b = self.add_weight(name="att_bias", shape=(input_shape[1], 1),
+                                 initializer="zeros")  # patch_size
+
+        self.v = self.add_weight(name="context_vector", shape=(input_shape[-1], 1),
+                                 initializer="normal")  # patch_size
+
+        super(SoftAttention, self).build(input_shape)
+
+    def call(self, x):
+        e = K.tanh(K.dot(x, self.W) + self.b)  # patch_size x 1
+        a = K.softmax(K.dot(K.transpose(e), self.v), axis=1)  # path_size x 1
+        output = x * a  # (path_size, hidden) * (patch_size x 1)
 
         if self.return_sequences:
             return output
@@ -320,12 +351,13 @@ def simple_bilstm(nch, patch_size, unit_size=80):
     return model
 
 
-def bilstm_attention_fernando19(nch, patch_size, unit_size=80):
+def bilstm_attention_fernando19_softmax(nch, patch_size, unit_size=80):
     inputs = Input(shape=(patch_size, nch))
 
     x = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(unit_size, return_sequences=True))(inputs)
-    attention = Attention(return_sequences=True)(x)
-    dense = tf.keras.layers.TimeDistributed(Dense(4, activation='softmax')(attention))
+    attention = SoftAttention(return_sequences=False)(x)
+    dense = tf.keras.layers.Dense(4, activation='softmax')(
+        attention)  # TODO: to reproduce the code as is use passthrough
 
     model = Model(inputs=[inputs], outputs=[dense])
     model.summary()
