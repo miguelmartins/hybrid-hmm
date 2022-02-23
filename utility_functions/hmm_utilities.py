@@ -116,3 +116,15 @@ def viterbi_pobs(p_states, trans_mat, y_pred, p_obs):
     for t in range(T - 2, -1, -1):
         best_path[t] = int(trellis[t, int(best_path[t + 1])])
     return viterbi, trellis, best_path
+
+
+def steady_state_distribution(trans_mat):
+    """
+    Solve Ps = s to find the steady state distribution for Hidden Markov Model
+    given its transition matrix trans_mat
+    :param trans_mat: a transition matrix
+    :return: state_state_p: the steady state distribution for the markov model
+    """
+    _, eigenvectors = np.linalg.eig(trans_mat)
+    steady_state_p = eigenvectors / np.sum(eigenvectors, axis=0)
+    return steady_state_p[:, 0]
