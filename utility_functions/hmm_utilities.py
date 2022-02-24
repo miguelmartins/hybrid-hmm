@@ -128,3 +128,18 @@ def steady_state_distribution(trans_mat):
     _, eigenvectors = np.linalg.eig(trans_mat)
     steady_state_p = eigenvectors / np.sum(eigenvectors, axis=0)
     return steady_state_p[:, 0]
+
+
+def QR_steady_state_distribution(trans_mat):
+    """
+    Inspired from: https://stephens999.github.io/fiveMinuteStats/stationary_distribution.html
+    Solve the overdetermined system A pi=b in the form of (I-P)^T pi^T = 0 subject to sum pi=1
+
+    :param trans_mat: a transition matrix
+    :return: state_state_p: the steady state distribution for the markov model
+
+    """
+    P = np.identity(trans_mat.shape[0]) - trans_mat
+    A = np.vstack([P.T, np.ones(trans_mat.shape[0])])
+    b = np.array([0] * trans_mat.shape[0] + [1])
+    return np.linalg.lstsq(A, b, rcond=None)[0]
