@@ -1,4 +1,5 @@
 import numpy as np
+import tensorflow as tf
 
 EPSILON = 1e-20  # 1e-12
 
@@ -68,8 +69,6 @@ def log_viterbi_no_marginal(p_states, trans_mat, y_pred):
     states_aux = np.arange(num_states)
     trellis_update_fn = (lambda x, y: (x - y) % num_states)
     p_bar = p_states
-    for i in range(10):
-        p_bar = np.dot(p_bar, trans_mat)
     p_bar = np.log(p_bar + EPSILON)
     y_pred_ = np.log(y_pred + EPSILON) - np.tile(p_bar, (T, 1))
     viterbi[0, :] = p_bar + y_pred[0, :]
@@ -143,3 +142,18 @@ def QR_steady_state_distribution(trans_mat):
     A = np.vstack([P.T, np.ones(trans_mat.shape[0])])
     b = np.array([0] * trans_mat.shape[0] + [1])
     return np.linalg.lstsq(A, b, rcond=None)[0]
+
+
+def TF_QR_steady_state_distribution(trans_mat: tf.Tensor):
+    """
+    Inspired from: https://stephens999.github.io/fiveMinuteStats/stationary_distribution.html
+    Solve the overdetermined system A pi=b in the form of (I-P)^T pi^T = 0 subject to sum pi=1
+    (Tensorflow implementation)
+    :param trans_mat: a transition matrix
+    :return: state_state_p: the steady state distribution for the markov model
+    """
+    P = tf.eye(tf.shape(trans_mat)[0], dtype=tf.float32) - trans_mat
+    A = tf.concat((tf.transpose(P), [tf.ones(tf.shape(trans_mat)[0])]), axis=0)
+    b = tf.concat([tf.zeros(tf.shape(trans_mat)[0]), tf.constant([1], dtype=tf.float32)], axis=0)
+    b = tf.reshape(b, [tf.shape(b)[0], 1])
+    return tf.linalg.lstsq(A, b)
