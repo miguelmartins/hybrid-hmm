@@ -303,8 +303,7 @@ class ForwardLoss(Loss):
         alpha = self.p_states * y_pred[0, :] # este alpha nao e
         for t in range(1, T):
             alpha_stay = alpha * tf.linalg.diag_part(self.trans_mat)
-            alpha_go_ = tf.roll(alpha, shift=1, axis=0) * tf.linalg.diag_part(tf.roll(self.trans_mat, shift=1, axis=0))
-            alpha_go = tf.roll(alpha_go_, shift=-1, axis=0)
+            alpha_go = tf.roll(alpha, shift=1, axis=0) * tf.linalg.diag_part(tf.roll(self.trans_mat, shift=1, axis=0))
             alpha = (alpha_stay + alpha_go) * y_pred[t, :]
         return tf.reduce_sum(alpha)
 
@@ -334,8 +333,7 @@ class ForwardLoss(Loss):
         p_bar = tf.cast(self.p_states, dtype=tf.float64)
         for t in range(1, T):
             alpha_stay = alpha * tf.cast(tf.linalg.diag_part(self.trans_mat), dtype=tf.float64)
-            alpha_go_ = tf.roll(alpha, shift=1, axis=0) * tf.cast(tf.linalg.diag_part(tf.roll(self.trans_mat, shift=1, axis=0)), dtype=tf.float64)
-            alpha_go = tf.roll(alpha_go_, shift=-1, axis=0)
+            alpha_go = tf.roll(alpha, shift=1, axis=0) * tf.cast(tf.linalg.diag_part(tf.roll(self.trans_mat, shift=1, axis=0)), dtype=tf.float64)
             p_bar = tf.tensordot(p_bar, tf.cast(self.trans_mat, dtype=tf.float64), axes=1)
             alpha = (alpha_stay + alpha_go) * (tf.cast(y_pred[t, :], dtype=tf.float64) / p_bar)
         return alpha
