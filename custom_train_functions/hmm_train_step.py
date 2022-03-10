@@ -3,6 +3,7 @@ import numpy as np
 
 from models.processing_layers import get_averaged_predictions
 from utility_functions.canonical_simplex import simplex_projection
+from utility_functions.hmm_utilities import QR_steady_state_distribution
 
 
 @tf.function(experimental_relax_shapes=True)

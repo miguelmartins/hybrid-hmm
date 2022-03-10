@@ -12,7 +12,7 @@ from loss_functions.MMI_losses import MMILoss
 from models.custom_models import simple_convnet
 from utility_functions.experiment_logs import PCGExperimentLogger
 
-from utility_functions.hmm_utilities import log_viterbi_no_marginal
+from utility_functions.hmm_utilities import log_viterbi_no_marginal, QR_steady_state_distribution
 
 
 def main():
@@ -20,7 +20,7 @@ def main():
     nch = 4
     num_epochs = 1
     number_folders = 10
-    learning_rate = 1e-4
+    learning_rate = 1e-1
 
     good_indices, features, labels, patient_ids, length_sounds = DataExtractor.extract(path='../datasets/PCG'
                                                                                             '/PhysioNet_SpringerFeatures_Annotated_featureFs_50_Hz_audio_ForPython.mat',
@@ -95,7 +95,8 @@ def main():
         dataset_np = list(train_dataset.as_numpy_iterator())
         dataset = np.array(dataset_np, dtype=object)
         labels_ = dataset[:, 1]
-        p_states, trans_mat = train_HMM_parameters(labels_)
+        _, trans_mat = train_HMM_parameters(labels_)
+        p_states = QR_steady_state_distribution(trans_mat)
         loss_object.trans_mat.assign(tf.Variable(trans_mat, trainable=True, dtype=tf.float32))
         loss_object.p_states.assign(tf.Variable(p_states, trainable=True, dtype=tf.float32))
 

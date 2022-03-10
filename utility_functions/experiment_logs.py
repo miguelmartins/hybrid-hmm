@@ -20,6 +20,13 @@ class PCGExperimentLogger:
         self.path = name_
         self.last_checkpoint = None
 
+    @staticmethod
+    def stored_model_checkpoints(model, path, cnn_prefix, fold):
+        path_ = path + '/'
+        cnn_path = path_ + cnn_prefix + str(fold)
+        model.load_weights(cnn_path)
+        return model, np.load(path_ + 'p_states_fold_' + str(fold) + '.npy'), np.load(path_ + 'trans_mat_fold_' + str(fold) + '.npy')
+
     def save_model_checkpoints(self, model, p_states, trans_mat, checkpoint_path, fold):
         self.last_checkpoint = self.path + '/' + checkpoint_path + str(fold)
         model.save_weights(self.last_checkpoint)

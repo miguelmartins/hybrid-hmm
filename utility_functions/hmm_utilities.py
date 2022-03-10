@@ -15,7 +15,7 @@ def viterbi(p_states, trans_mat, y_pred, p_obs=None):
     for i in range(10):
         p_bar = np.dot(p_bar, trans_mat)
     y_pred_ = np.divide(y_pred * p_obs, np.tile(p_bar, (T, 1)))
-    viterbi[0, :] = p_bar * y_pred[0, :]
+    viterbi[0, :] = p_bar * y_pred_[0, :]
     for t in range(1, T):
         viterbi_lhs = np.multiply(viterbi[t - 1, :], np.diagonal(trans_mat)) * y_pred_[t, :]
         viterbi_rhs = np.multiply(np.roll(viterbi[t - 1, :], 1), np.diagonal(np.roll(trans_mat, 1, axis=0))) * y_pred_[
