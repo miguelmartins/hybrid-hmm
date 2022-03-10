@@ -275,7 +275,6 @@ class ForwardLoss(Loss):
         super().__init__()
         self.trans_mat = trans_mat
         self.p_states = p_states
-        self.alpha = tf.Variable(tf.zeros(tf.shape(p_states), dtype=tf.float32))
 
     def call(self, y_true, y_pred):
         """
@@ -293,19 +292,22 @@ class ForwardLoss(Loss):
         tf.Variable
             The negative MMI value for optimization
         """
-        fb = self._forward_backward(y_pred)
-        sum_fb = tf.math.reduce_sum(fb)  # log p(o|HMM) = - sum_t log(c_t | HMM)
-        tf.print("gradient:", sum_fb)
-        return -sum_fb
+        return -self._forward_backward(y_pred)
 
     def _forward_backward(self, y_pred):
         T = tf.shape(y_pred)[0]
-        alpha = self.p_states * y_pred[0, :] # este alpha nao e
+        alpha = self.p_states * y_pred[0, :]
+        c_t = 1 / tf.reduce_sum(alpha)
+        alpha *= c_t
+        C = tf.math.log(c_t)
         for t in range(1, T):
             alpha_stay = alpha * tf.linalg.diag_part(self.trans_mat)
             alpha_go = tf.roll(alpha, shift=1, axis=0) * tf.linalg.diag_part(tf.roll(self.trans_mat, shift=1, axis=0))
             alpha = (alpha_stay + alpha_go) * y_pred[t, :]
-        return tf.reduce_sum(alpha)
+            c_t = 1 / tf.reduce_sum(alpha)
+            alpha *= c_t
+            C += tf.math.log(c_t)
+        return -C
 
     def __forward_backward(self, y_pred):
         """
