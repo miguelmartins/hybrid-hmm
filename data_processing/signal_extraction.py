@@ -70,7 +70,7 @@ class DataExtractor:
         return mfcc_data
 
     @staticmethod
-    def extract(path, patch_size):
+    def extract(path, patch_size, filter_noisy=True):
         data = sio.loadmat(path, squeeze_me=True)
         raw_features = data['Feat_cell']
         raw_labels = data['Lab_cell']
@@ -79,7 +79,18 @@ class DataExtractor:
         # remove sounds shorter than patch size (and record sound indexes)
         length_sounds = np.array([len(raw_features[j]) for j in range(len(raw_features))])
         valid_indices = np.array([j for j in range(len(raw_features)) if len(raw_features[j]) >= patch_size])
+        # Filter noisy labels. (Use for filtering out small label mistakes in Springer16)
+        if filter_noisy:
+            labels_ = raw_labels[valid_indices]
+            noisy_indices = []
+            for idx, lab in enumerate(labels_):
+                lab = lab - 1
+                for t in range(1, len(lab)):
+                    if lab[t] != lab[t - 1] and lab[t] != (lab[t - 1] + 1) % 4:
+                        noisy_indices.append(valid_indices[idx])
 
+            valid_indices = np.array(list(set(valid_indices) - set(noisy_indices)))
+            print(f"Filtered {len(set(noisy_indices))} observations containing noisy labels")
         features = raw_features[valid_indices]
         labels = raw_labels[valid_indices]
         patient_ids = raw_patient_ids[valid_indices]
