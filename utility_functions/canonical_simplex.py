@@ -46,6 +46,57 @@ def simplex_projection_1d(vec):
     return x_til
 
 
+def projection_simplex(V, z=1, axis=None):
+    """
+    Source: https://gist.github.com/mblondel/c99e575a5207c76a99d714e8c6e08e89
+    Projection of x onto the simplex, scaled by z:
+        P(x; z) = argmin_{y >= 0, sum(y) = z} ||y - x||^2
+    z: float or array
+        If array, len(z) must be compatible with V
+    axis: None or int
+        axis=None: project V by P(V.ravel(); z)
+        axis=1: project each V[i] by P(V[i]; z[i])
+        axis=0: project each V[:, j] by P(V[:, j]; z[j])
+    """
+    if axis == 1:
+        n_features = V.shape[1]
+        U = np.sort(V, axis=1)[:, ::-1]
+        z = np.ones(len(V)) * z
+        cssv = np.cumsum(U, axis=1) - z[:, np.newaxis]
+        ind = np.arange(n_features) + 1
+        cond = U - cssv / ind > 0
+        rho = np.count_nonzero(cond, axis=1)
+        theta = cssv[np.arange(len(V)), rho - 1] / rho
+        return np.maximum(V - theta[:, np.newaxis], 0)
+
+    elif axis == 0:
+        return projection_simplex(V.T, z, axis=1).T
+
+    else:
+        V = V.ravel().reshape(1, -1)
+        return projection_simplex(V, z, axis=1).ravel()
+
+
+def project_matrix_row_components(trans_mat):
+    """
+
+    Parameters
+    ----------
+    trans_mat A left to right markovian matrix
+
+    Returns The canonical simplex projected only on the positive components
+    -------
+
+    """
+    num_zeros = trans_mat.shape[0] - 2
+    for offset, row in enumerate(trans_mat):
+        proj = projection_simplex(np.roll(row, -offset)[:2])
+        prob_vector = np.concatenate([proj, np.zeros(num_zeros)])
+        proj = np.roll(prob_vector, offset)
+        trans_mat[offset, :] = proj
+    return trans_mat
+
+
 def simplex_projection(mat):
     """
     Calls a canonical simplex polyhedron projection for R^n for the the rowspace of the input Matrix mat
