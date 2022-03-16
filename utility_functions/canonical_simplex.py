@@ -77,7 +77,7 @@ def projection_simplex(V, z=1, axis=None):
         return projection_simplex(V, z, axis=1).ravel()
 
 
-def project_matrix_row_components(trans_mat):
+def project_matrix_row_components(trans_mat, jitter_treshold=0.005, jitter=0.1):
     """
 
     Parameters
@@ -91,6 +91,11 @@ def project_matrix_row_components(trans_mat):
     num_zeros = trans_mat.shape[0] - 2
     for offset, row in enumerate(trans_mat):
         proj = projection_simplex(np.roll(row, -offset)[:2])
+        # Add a jitter when the row is no longer stochastic
+        if np.any([proj < jitter_treshold]):
+            idx = np.where(proj < jitter_treshold)[0]
+            idx_1 = (idx + 1) % 2
+            proj[idx], proj[idx_1] = jitter, 1 - jitter
         prob_vector = np.concatenate([proj, np.zeros(num_zeros)])
         proj = np.roll(prob_vector, offset)
         trans_mat[offset, :] = proj
