@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 
 from models.processing_layers import get_averaged_predictions
-from utility_functions.canonical_simplex import simplex_projection
+from utility_functions.canonical_simplex import simplex_projection, project_matrix_row_components
 from utility_functions.hmm_utilities import QR_steady_state_distribution
 
 
@@ -176,7 +176,6 @@ def hmm_train_step_multi_opt(*, model, optimizer_nn, optimizer_hmm, train_batch,
         tf.Variable(simplex_projection(loss_object.p_states.numpy()), trainable=True, dtype=tf.float32))
     loss_object.trans_mat.assign(
         tf.Variable(simplex_projection(loss_object.trans_mat.numpy()), trainable=True, dtype=tf.float32))
-
     # Update train_metrics should they exist
     if metrics is not None and len(metrics) > 0:
         for metric in metrics:
@@ -219,11 +218,10 @@ def hmm_train_step(*, model, optimizer, train_batch, label_batch, loss_object, m
     logits, loss_value = apply_gradient(optimizer, loss_object, model, train_batch, label_batch)
 
     # Update stationary p_states and trans_matrix gradients after canonical simplex projection
-    loss_object.p_states.assign(
-        tf.Variable(simplex_projection(loss_object.p_states.numpy()), trainable=True, dtype=tf.float32))
     loss_object.trans_mat.assign(
-        tf.Variable(simplex_projection(loss_object.trans_mat.numpy()), trainable=True, dtype=tf.float32))
-
+         tf.Variable(project_matrix_row_components(loss_object.trans_mat.numpy()), trainable=True, dtype=tf.float32))
+    loss_object.p_states.assign(
+        tf.Variable(QR_steady_state_distribution(loss_object.trans_mat.numpy()), trainable=True, dtype=tf.float32))
     # Update train_metrics should they exist
     if metrics is not None and len(metrics) > 0:
         for metric in metrics:
