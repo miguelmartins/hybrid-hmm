@@ -3,29 +3,29 @@ import tensorflow as tf
 
 from sklearn.metrics import accuracy_score, precision_score
 from sklearn.model_selection import train_test_split
-
+from tqdm import tqdm
 
 from data_processing.signal_extraction import DataExtractor
 from data_processing.data_transformation import HybridPCGDataPreparer, prepare_validation_data, get_train_test_indices
 from custom_train_functions.hmm_train_step import hmm_train_step, train_HMM_parameters
-from loss_functions.MMI_losses import MMILoss
+from loss_functions.MMI_losses import MMILoss, CompleteLikelihoodLoss
 from models.custom_models import simple_convnet
 from utility_functions.experiment_logs import PCGExperimentLogger
 
 from utility_functions.hmm_utilities import log_viterbi_no_marginal, QR_steady_state_distribution
 
-
 def main():
     patch_size = 64
     nch = 4
-    num_epochs = 1
+    num_epochs = 50
     number_folders = 10
-    learning_rate = 1e-1
+    learning_rate = 1e-4
 
     good_indices, features, labels, patient_ids, length_sounds = DataExtractor.extract(path='../datasets/PCG'
                                                                                             '/PhysioNet_SpringerFeatures_Annotated_featureFs_50_Hz_audio_ForPython.mat',
                                                                                        patch_size=patch_size)
-    experiment_logger = PCGExperimentLogger(path='../results/hybrid', name='hmm_nn', number_folders=number_folders)
+    name = "hmm_mmi_physio16_envelops_joint"
+    experiment_logger = PCGExperimentLogger(path='../results/hybrid', name=name, number_folders=number_folders)
     print('Total number of valid sounds with length > ' + str(patch_size / 50) + ' seconds: ' + str(len(good_indices)))
     # 1) save files on a given directory, maybe experiment-name/date/results
     # 2) save model weights (including random init, maybe  experiment-name/date/checkpoints
@@ -103,7 +103,7 @@ def main():
         train_dataset = train_dataset.shuffle(len(X_train), reshuffle_each_iteration=True)
         for ep in range(num_epochs):
             print('=', end='')
-            for (x_train, y_train) in train_dataset:
+            for i, (x_train, y_train) in tqdm(enumerate(train_dataset), desc=f'training', total=len(X_train), leave=True):
                 hmm_train_step(model=model,
                                optimizer=optimizer_nn,
                                loss_object=loss_object,
@@ -118,6 +118,8 @@ def main():
             print("Epoch ", ep, " train loss = ", train_loss, " train accuracy = ", train_acc, "val loss = ", val_loss,
                   "val accuracy = ", val_acc)
             checkpoint = './checkpoints/hybrid_physion/' + str(j_fold) + '/my_checkpoint'
+            print(loss_object.trans_mat.numpy())
+            print(loss_object.p_states.numpy())
             if val_loss < min_val_loss:
                 min_val_loss = val_loss
                 # SAVE MODEL
@@ -136,7 +138,7 @@ def main():
         print(loss_object.trans_mat.numpy())
 
         # Viterbi algorithm in test set
-        for x, y in test_dataset:
+        for x, y in tqdm(test_dataset, desc=f'validating (viterbi)', total=len(labels_test), leave=True):
             logits = model.predict(x)
             y = y.numpy()
             _, _, predictions = log_viterbi_no_marginal(loss_object.p_states.numpy(), loss_object.trans_mat.numpy(),
