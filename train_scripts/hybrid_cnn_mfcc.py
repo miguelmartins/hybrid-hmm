@@ -8,12 +8,12 @@ from data_processing.signal_extraction import DataExtractor
 from data_processing.data_transformation import HybridPCGDataPreparer2D, \
     prepare_validation_data, get_train_test_indices
 from custom_train_functions.hmm_train_step import hmm_train_step, train_HMM_parameters
-from loss_functions.MMI_losses import MMILoss
+from loss_functions.MMI_losses import MMILoss, CompleteLikelihoodLoss
 from models.custom_models import simple_convnet2d
 from utility_functions.experiment_logs import PCGExperimentLogger
 
 from utility_functions.hmm_utilities import log_viterbi_no_marginal
-
+from tqdm import tqdm
 
 def main():
     patch_size = 64
@@ -34,13 +34,13 @@ def main():
                                        window_length=150,
                                        window_overlap=130,
                                        n_mfcc=nch)
-
-    experiment_logger = PCGExperimentLogger(path='../results/hybrid', name='mfcc_hmm_nn', number_folders=number_folders)
+    name = 'hmm_completlikelihood1e3_physio16_mfcc_joint'
+    experiment_logger = PCGExperimentLogger(path='../results/hybrid', name=name, number_folders=number_folders)
     print('Total number of valid sounds with length > ' + str(patch_size / 50) + ' seconds: ' + str(len(good_indices)))
     # 1) save files on a given directory, maybe experiment-name/date/results
     # 2) save model weights (including random init, maybe  experiment-name/date/checkpoints
     model = simple_convnet2d(nch, patch_size)
-    loss_object = MMILoss(tf.Variable(tf.zeros((4, 4)), trainable=True, dtype=tf.float32),
+    loss_object = CompleteLikelihoodLoss(tf.Variable(tf.zeros((4, 4)), trainable=True, dtype=tf.float32),
                           tf.Variable(tf.zeros((4,)), trainable=True, dtype=tf.float32))
     optimizer_nn = tf.keras.optimizers.Adam(learning_rate=learning_rate)
 
@@ -92,7 +92,7 @@ def main():
                                                            tf.TensorSpec(shape=(None, patch_size, nch, 1),
                                                                          dtype=tf.float32),
                                                            tf.TensorSpec(shape=(None, 4), dtype=tf.float32))
-                                                       )
+                                                       ).cache().prefetch(buffer_size=tf.data.AUTOTUNE)
         dev_dp = HybridPCGDataPreparer2D(patch_size=patch_size, number_channels=nch, num_states=4)
         dev_dp.set_features_and_labels(X_dev, y_dev)
         dev_dataset = tf.data.Dataset.from_generator(dev_dp,
@@ -100,7 +100,7 @@ def main():
                                                          tf.TensorSpec(shape=(None, patch_size, nch, 1),
                                                                        dtype=tf.float32),
                                                          tf.TensorSpec(shape=(None, 4), dtype=tf.float32))
-                                                     )
+                                                     ).cache().prefetch(buffer_size=tf.data.AUTOTUNE)
 
         test_dp = HybridPCGDataPreparer2D(patch_size=patch_size, number_channels=nch, num_states=4)
         test_dp.set_features_and_labels(features_test, labels_test)
@@ -109,7 +109,7 @@ def main():
                                                           tf.TensorSpec(shape=(None, patch_size, nch, 1),
                                                                         dtype=tf.float32),
                                                           tf.TensorSpec(shape=(None, 4), dtype=tf.float32))
-                                                      )
+                                                      ).cache().prefetch(buffer_size=tf.data.AUTOTUNE)
 
         # MLE Estimation for HMM
         dataset_np = list(train_dataset.as_numpy_iterator())
@@ -122,7 +122,7 @@ def main():
         train_dataset = train_dataset.shuffle(buffer_size=400, reshuffle_each_iteration=True)
         for ep in range(num_epochs):
             print('=', end='')
-            for (x_train, y_train) in train_dataset:
+            for i, (x_train, y_train) in tqdm(enumerate(train_dataset), desc=f'training', total=len(X_train), leave=True):
                 hmm_train_step(model=model,
                                optimizer=optimizer_nn,
                                loss_object=loss_object,
@@ -160,7 +160,7 @@ def main():
         print(loss_object.trans_mat.numpy())
         acc_cnn = []
         # Viterbi algorithm in test set
-        for x, y in test_dataset:
+        for x, y in tqdm(test_dataset, desc=f'validating (viterbi)', total=len(labels_test), leave=True):
             logits = model.predict(x)
             y = y.numpy()
             _, _, predictions = log_viterbi_no_marginal(loss_object.p_states.numpy(), loss_object.trans_mat.numpy(),
