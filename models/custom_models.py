@@ -32,6 +32,15 @@ class Attention(Layer):
 
         return K.sum(output, axis=1)
 
+    def get_config(self):
+        config = super().get_config().copy()
+        config.update({
+            'att_weight': self.W,
+            'att_bias': self.b,
+            'context_vector': self.v
+        })
+        return config
+
 
 class SoftWindowedAttention(Layer):
     # Adapted form:
@@ -64,6 +73,15 @@ class SoftWindowedAttention(Layer):
 
         return K.sum(output, axis=1)
 
+    def get_config(self):
+        config = super().get_config().copy()
+        config.update({
+            'att_weight': self.W,
+            'att_bias': self.b,
+            'context_vector': self.v
+        })
+        return config
+
 
 class SoftAttention(Layer):
     # Adapted form:
@@ -95,6 +113,15 @@ class SoftAttention(Layer):
             return output
 
         return K.sum(output, axis=2)
+
+    def get_config(self):
+        config = super().get_config().copy()
+        config.update({
+            'att_weight': self.W,
+            'att_bias': self.b,
+            'context_vector': self.v
+        })
+        return config
 
 
 def vgg16_fine_tune(num_classes, input_shape=(224, 224, 3)):
