@@ -58,7 +58,7 @@ class DataExtractor:
         _hop_length = window_length - window_overlap
         for i in range(len(data)):
             recording = data[i]
-            mfcc = librosa.feature.mfcc(recording.squeeze(),
+            mfcc = librosa.feature.mfcc(y=recording.squeeze(),
                                         n_fft=window_length,
                                         sr=sampling_rate,
                                         hop_length=_hop_length,
