@@ -95,7 +95,7 @@ class DataExtractor:
             d_t = 0
             for n in range(delta_diff):
                 d_t += (n + 1) * (coefficients[min(coefficients.shape[0] - 1, t + n), :] - coefficients[max(0, t - n), :])
-            delta[t:, ] = d_t / norm
+            delta[t, :] = d_t / norm
         return delta
 
     @staticmethod
