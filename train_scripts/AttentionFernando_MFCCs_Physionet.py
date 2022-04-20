@@ -4,16 +4,17 @@ import tensorflow as tf
 from sklearn.metrics import accuracy_score, precision_score
 from sklearn.model_selection import train_test_split
 from tensorflow.python.keras.callbacks import ModelCheckpoint
-from tqdm import tqdm
 
 from data_processing.signal_extraction import DataExtractor
-from data_processing.data_transformation import HybridPCGDataPreparer, prepare_validation_data, get_train_test_indices
+from data_processing.data_transformation import HybridPCGDataPreparer2D, \
+    prepare_validation_data, get_train_test_indices
 from custom_train_functions.hmm_train_step import hmm_train_step, train_HMM_parameters
-from loss_functions.MMI_losses import MMILoss
-from models.custom_models import simple_convnet, bilstm_attention_fernando19_softmax
+from loss_functions.MMI_losses import MMILoss, CompleteLikelihoodLoss
+from models.custom_models import simple_convnet2d, bilstm_attention_fernando19_softmax
 from utility_functions.experiment_logs import PCGExperimentLogger
 
 from utility_functions.hmm_utilities import log_viterbi_no_marginal, QR_steady_state_distribution
+from tqdm import tqdm
 
 
 def scheduler(epoch, lr): return lr * 10 if epoch == 10 else lr
@@ -21,16 +22,29 @@ def scheduler(epoch, lr): return lr * 10 if epoch == 10 else lr
 
 def main():
     patch_size = 64
-    nch = 4
+    n_mfcc = 6
+    nch = n_mfcc * 3
     num_epochs = 50
     number_folders = 10
     learning_rate = 0.002
     batch_size = 32
 
-    good_indices, features, labels, patient_ids, length_sounds = DataExtractor.extract(path='../datasets/PCG'
-                                                                                            '/PhysioNet_SpringerFeatures_Annotated_featureFs_50_Hz_audio_ForPython.mat',
-                                                                                       patch_size=patch_size)
-    name = "fernando_CE_physio16_envelops_joint"
+    good_indices, _, labels, patient_ids, length_sounds = DataExtractor.extract(path='../datasets/PCG'
+                                                                                     '/PhysioNet_SpringerFeatures_Annotated_featureFs_50_Hz_audio_ForPython.mat',
+                                                                                patch_size=patch_size)
+    features_, _ = DataExtractor.read_physionet_mat(
+        '../datasets/PCG/example_data.mat')  # TODO: o som original deve ter 20x mais samples
+    length_sounds = np.array([len(features_[j]) for j in range(len(features_))])
+    features = DataExtractor.filter_by_index(features_, good_indices)
+    features = DataExtractor.get_mfccs(data=features,
+                                       sampling_rate=1000,
+                                       window_length=80,
+                                       window_overlap=60,
+                                       resample=1600,
+                                       delta_delta=True,
+                                       n_mfcc=n_mfcc)
+    print(features)
+    name = 'fernando_CE_physio16_mfcc_joint'
     experiment_logger = PCGExperimentLogger(path='../results/fernando', name=name, number_folders=number_folders)
     print('Total number of valid sounds with length > ' + str(patch_size / 50) + ' seconds: ' + str(len(good_indices)))
     # 1) save files on a given directory, maybe experiment-name/date/results
@@ -39,15 +53,12 @@ def main():
     optimizer_nn = tf.keras.optimizers.Adam(learning_rate=learning_rate)
 
     model.compile(optimizer=optimizer_nn, loss='categorical_crossentropy', metrics=['categorical_accuracy'])
-    model.save_weights('random_init_lstm')  # Save initialization before training
+    model.save_weights('random_init_lstm_attention')  # Save initialization before training
 
     acc_folds, prec_folds = [], []
     for j_fold in range(number_folders):
-        optimizer_nn = tf.keras.optimizers.Adam(learning_rate=learning_rate)
-        model.compile(optimizer=optimizer_nn, loss='categorical_crossentropy', metrics=['categorical_accuracy'])
-
         min_val_loss = 1e3
-        model.load_weights('random_init_lstm')  # Load random weights f.e. fold
+        model.load_weights('random_init_lstm_attention')  # Load random weights f.e. fold
         train_indices, test_indices = get_train_test_indices(good_indices=good_indices,
                                                              number_folders=number_folders,
                                                              patient_ids=patient_ids,
@@ -73,30 +84,40 @@ def main():
         X_train, X_dev, y_train, y_dev = train_test_split(
             features_train, labels_train, test_size=0.1, random_state=42)
 
-        dp = HybridPCGDataPreparer(patch_size=patch_size, number_channels=nch, num_states=4)
+        # NORMALIZAR PSD
+        # como separar as features para a nossa CNN?
+        # com os envolopes separámos em patches, aqui usamos a própria dimensão da STFT?
+        # Contruir datapreparer:
+        #    - Separe o som por janelas PSD
+        #
+        # Implementar uma CNN com convoluções 2D: first approach -> mudar a nossa CNN para operações 2D.
+        # ???
+        # Profit
+        dp = HybridPCGDataPreparer2D(patch_size=patch_size, number_channels=nch, num_states=4)
         dp.set_features_and_labels(X_train, y_train)
         train_dataset = tf.data.Dataset.from_generator(dp,
                                                        output_signature=(
-                                                           tf.TensorSpec(shape=(None, patch_size, nch),
+                                                           tf.TensorSpec(shape=(None, patch_size, nch, 1),
                                                                          dtype=tf.float32),
                                                            tf.TensorSpec(shape=(None, 4), dtype=tf.float32))
-                                                       )
-        dev_dp = HybridPCGDataPreparer(patch_size=patch_size, number_channels=nch, num_states=4)
+                                                       ).cache().prefetch(buffer_size=tf.data.AUTOTUNE)
+        dev_dp = HybridPCGDataPreparer2D(patch_size=patch_size, number_channels=nch, num_states=4)
         dev_dp.set_features_and_labels(X_dev, y_dev)
         dev_dataset = tf.data.Dataset.from_generator(dev_dp,
                                                      output_signature=(
-                                                         tf.TensorSpec(shape=(None, patch_size, nch), dtype=tf.float32),
+                                                         tf.TensorSpec(shape=(None, patch_size, nch, 1),
+                                                                       dtype=tf.float32),
                                                          tf.TensorSpec(shape=(None, 4), dtype=tf.float32))
-                                                     )
+                                                     ).cache().prefetch(buffer_size=tf.data.AUTOTUNE)
 
-        test_dp = HybridPCGDataPreparer(patch_size=patch_size, number_channels=nch, num_states=4)
+        test_dp = HybridPCGDataPreparer2D(patch_size=patch_size, number_channels=nch, num_states=4)
         test_dp.set_features_and_labels(features_test, labels_test)
         test_dataset = tf.data.Dataset.from_generator(test_dp,
                                                       output_signature=(
-                                                          tf.TensorSpec(shape=(None, patch_size, nch),
+                                                          tf.TensorSpec(shape=(None, patch_size, nch, 1),
                                                                         dtype=tf.float32),
                                                           tf.TensorSpec(shape=(None, 4), dtype=tf.float32))
-                                                      )
+                                                      ).cache().prefetch(buffer_size=tf.data.AUTOTUNE)
 
         # MLE Estimation for HMM
         dataset_np = list(train_dataset.as_numpy_iterator())
@@ -105,7 +126,7 @@ def main():
         _, trans_mat = train_HMM_parameters(labels_)
         p_states = QR_steady_state_distribution(trans_mat)
 
-        train_dataset = train_dataset.shuffle(len(X_train), reshuffle_each_iteration=True)
+        train_dataset = train_dataset.shuffle(buffer_size=400, reshuffle_each_iteration=True)
         checkpoint_path = experiment_logger.path + '/weights_fold' + str(j_fold) + '.hdf5'
         model_checkpoint = ModelCheckpoint(filepath=checkpoint_path, monitor='val_loss', save_best_only=True)
         schedule = tf.keras.callbacks.LearningRateScheduler(scheduler, verbose=0)
@@ -115,7 +136,6 @@ def main():
                             shuffle=True, callbacks=[model_checkpoint, schedule])
         experiment_logger.save_markov_state(j_fold, p_states, trans_mat)
         model.load_weights(checkpoint_path)
-
         out_test = model.predict(test_dataset)
         accuracy, precision = [], []
 

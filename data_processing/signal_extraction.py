@@ -56,7 +56,9 @@ class DataExtractor:
     def get_mfccs(data, sampling_rate, window_length, window_overlap, n_mfcc, fmin=25, fmax=400, resample=None,
                   delta=True, delta_delta=True, delta_diff=2):
         if resample is not None:
-            data = DataExtractor.resample_signal(data, new_rate=resample)
+            data = DataExtractor.resample_signal(data, original_rate=sampling_rate, new_rate=resample)
+            sampling_rate = resample  # TODO: this is bad practice, change after test
+
         mfcc_data = np.zeros(data.shape, dtype=object)
         _hop_length = window_length - window_overlap
         for i in range(len(data)):
