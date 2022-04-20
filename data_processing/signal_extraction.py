@@ -16,7 +16,7 @@ class DataExtractor:
         return pcg_recordings, patient_ids
 
     @staticmethod
-    def downsample_signal(data, original_rate=1000, new_rate=50):
+    def resample_signal(data, original_rate=1000, new_rate=50):
         downsampled_data = []
         for recording in data:
             time_secs = len(recording) / original_rate
@@ -65,9 +65,38 @@ class DataExtractor:
                                         n_mfcc=n_mfcc,
                                         fmin=fmin,
                                         fmax=fmax)
-            mfcc_data[i] = mfcc.T  # switch the time domain to the first dimension
-
+            mfcc = mfcc.T  # switch the time domain to the first dimension
+            length_mfcc = mfcc.shape[0]
+            normalization = np.sum(np.sum(mfcc, axis=0))
+            mfcc_data[i] = mfcc / (normalization / length_mfcc)
         return mfcc_data
+
+    @staticmethod
+    def calculate_delta(coefficients, delta_diff=2):
+        """
+        Given coeffients of a delta^k mfcc, calculates delta^(k+1).
+        Normalization according to:
+        http://practicalcryptography.com/miscellaneous/machine-learning/guide-mel-frequency-cepstral-coefficients-mfccs/#deltas-and-delta-deltas
+        Parameters
+        ----------
+        coefficients : np.ndarray
+            A ndarray of shape (t, c), i.e. c coefficients for every sample t in the signal
+        delta_diff : int
+            The offset in time used to calculate the deltas
+
+        Returns
+        -------
+        np.ndarray
+            A ndarray of shape (t, c), where each t has c delta coefficients
+        """
+        delta = np.zeros(coefficients.shape)
+        norm = 2 * np.sum(np.arange(1, delta_diff + 1) ** 2)
+        for t in range(coefficients.shape[0]):
+            d_t = 0
+            for n in range(delta_diff):
+                d_t += (n + 1) * (coefficients[min(coefficients.shape[0] - 1, t + n), :] - coefficients[max(0, t - n), :])
+            delta[t:, ] = d_t / norm
+        return delta
 
     @staticmethod
     def extract(path, patch_size, filter_noisy=True):
