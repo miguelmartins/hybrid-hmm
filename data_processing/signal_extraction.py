@@ -17,13 +17,13 @@ class DataExtractor:
 
     @staticmethod
     def resample_signal(data, original_rate=1000, new_rate=50):
-        downsampled_data = []
+        resampled_data = []
         for recording in data:
             time_secs = len(recording) / original_rate
             number_of_samples = int(time_secs * new_rate)
             # downsample from the filtered signal
-            downsampled_data.append(scipy.signal.resample(recording, number_of_samples).squeeze())
-        return np.array(downsampled_data)
+            resampled_data.append(scipy.signal.resample(recording, number_of_samples).squeeze())
+        return np.array(resampled_data)
 
     @staticmethod
     def get_power_spectrum(data, sampling_rate, window_length, window_overlap, window_type='hann'):
@@ -53,7 +53,10 @@ class DataExtractor:
         return psd_data
 
     @staticmethod
-    def get_mfccs(data, sampling_rate, window_length, window_overlap, n_mfcc, fmin=25, fmax=400):
+    def get_mfccs(data, sampling_rate, window_length, window_overlap, n_mfcc, fmin=25, fmax=400, resample=None,
+                  delta=True, delta_delta=True, delta_diff=2):
+        if resample is not None:
+            data = DataExtractor.resample_signal(data, new_rate=resample)
         mfcc_data = np.zeros(data.shape, dtype=object)
         _hop_length = window_length - window_overlap
         for i in range(len(data)):
@@ -68,7 +71,19 @@ class DataExtractor:
             mfcc = mfcc.T  # switch the time domain to the first dimension
             length_mfcc = mfcc.shape[0]
             normalization = np.sum(np.sum(mfcc, axis=0))
-            mfcc_data[i] = mfcc / (normalization / length_mfcc)
+            mfcc = mfcc / (normalization / length_mfcc)
+
+            # Kind of ugly but it works. If delta-delta is True then concatenates delta also.
+            if delta_delta is True:
+                delta_ = DataExtractor.calculate_delta(mfcc, delta_diff)
+                delta_delta_ = DataExtractor.calculate_delta(delta_, delta_diff)
+                mfcc_data[i] = np.concatenate([mfcc, delta_, delta_delta_], axis=1)
+            elif delta is True:
+                delta_ = DataExtractor.calculate_delta(mfcc, delta_diff)
+                mfcc_data[i] = np.concatenate([mfcc, delta_], axis=1)
+            else:
+                mfcc_data[i] = mfcc
+
         return mfcc_data
 
     @staticmethod
