@@ -2,7 +2,7 @@ import librosa
 import numpy as np
 import scipy.io as sio
 import scipy.signal
-from sklearn.preprocessing import scale
+import speechpy
 
 
 class DataExtractor:
@@ -54,7 +54,7 @@ class DataExtractor:
 
     @staticmethod
     def get_mfccs(data, sampling_rate, window_length, window_overlap, n_mfcc, fmin=25, fmax=400, resample=None,
-                  delta=True, delta_delta=True, delta_diff=2):
+                          delta=True, delta_delta=True):
         if resample is not None:
             data = DataExtractor.resample_signal(data, original_rate=sampling_rate, new_rate=resample)
             sampling_rate = resample  # TODO: this is bad practice, change after test
@@ -63,25 +63,24 @@ class DataExtractor:
         _hop_length = window_length - window_overlap
         for i in range(len(data)):
             recording = data[i]
-            mfcc = librosa.feature.mfcc(y=recording.squeeze(),
-                                        n_fft=window_length,
-                                        sr=sampling_rate,
-                                        hop_length=_hop_length,
-                                        n_mfcc=n_mfcc,
-                                        fmin=fmin,
-                                        fmax=fmax)
-            mfcc = mfcc.T  # switch the time domain to the first dimension
-            length_mfcc = mfcc.shape[0]
-            normalization = np.sum(np.sum(mfcc, axis=0))
-            mfcc = mfcc / (normalization / length_mfcc)
-
-            # Kind of ugly but it works. If delta-delta is True then concatenates delta also.
+            S = librosa.feature.melspectrogram(y=recording.squeeze(),
+                                               n_fft=window_length,
+                                               sr=sampling_rate,
+                                               hop_length=_hop_length,
+                                               fmin=fmin,
+                                               fmax=fmax,
+                                               window='hann')
+            # Convert to log scale (dB).
+            log_S = librosa.amplitude_to_db(S, ref=np.max)
+            mfcc = librosa.feature.mfcc(S=log_S, n_mfcc=n_mfcc)
+            # Transpose to [T, Mel] and normalize using Global Cepstral Mean
+            mfcc = speechpy.processing.cmvn(mfcc.T, variance_normalization=True)
             if delta_delta is True:
-                delta_ = DataExtractor.calculate_delta(mfcc, delta_diff)
-                delta_delta_ = DataExtractor.calculate_delta(delta_, delta_diff)
+                delta_ = librosa.feature.delta(mfcc, mode='mirror')
+                delta_delta_ = librosa.feature.delta(mfcc, order=2, mode='mirror')
                 mfcc_data[i] = np.concatenate([mfcc, delta_, delta_delta_], axis=1)
             elif delta is True:
-                delta_ = DataExtractor.calculate_delta(mfcc, delta_diff)
+                delta_ = librosa.feature.delta(mfcc, mode='mirror')
                 mfcc_data[i] = np.concatenate([mfcc, delta_], axis=1)
             else:
                 mfcc_data[i] = mfcc
@@ -111,7 +110,9 @@ class DataExtractor:
         for t in range(coefficients.shape[0]):
             d_t = 0
             for n in range(delta_diff):
-                d_t += (n + 1) * (coefficients[min(coefficients.shape[0] - 1, t + n), :] - coefficients[max(0, t - n), :])
+                d_t += (n + 1) * (
+                        coefficients[min(coefficients.shape[0] - 1, t + n), :] - coefficients[max(0, t - n), :]
+                )
             delta[t, :] = d_t / norm
         return delta
 
