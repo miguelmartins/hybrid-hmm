@@ -5,19 +5,19 @@ from sklearn.metrics import accuracy_score, precision_score
 from sklearn.model_selection import train_test_split
 
 from data_processing.signal_extraction import DataExtractor
-from data_processing.data_transformation import HybridPCGDataPreparer2D, \
-    prepare_validation_data, get_train_test_indices
+from data_processing.data_transformation import HybridPCGDataPreparer2D, get_train_test_indices
 from custom_train_functions.hmm_train_step import hmm_train_step, train_HMM_parameters
 from loss_functions.MMI_losses import MMILoss, CompleteLikelihoodLoss
 from models.custom_models import simple_convnet2d
 from utility_functions.experiment_logs import PCGExperimentLogger
 
-from utility_functions.hmm_utilities import log_viterbi_no_marginal
+from utility_functions.hmm_utilities import log_viterbi_no_marginal, QR_steady_state_distribution
 from tqdm import tqdm
+
 
 def main():
     patch_size = 64
-    nch = 32
+    nch = 18
     num_epochs = 50
     number_folders = 10
     learning_rate = 1e-3
@@ -33,7 +33,8 @@ def main():
                                        sampling_rate=1000,
                                        window_length=150,
                                        window_overlap=130,
-                                       n_mfcc=nch)
+                                       n_mfcc=6)
+    print(features)
     name = 'hmm_completlikelihood1e3_physio16_mfcc_joint'
     experiment_logger = PCGExperimentLogger(path='../results/hybrid', name=name, number_folders=number_folders)
     print('Total number of valid sounds with length > ' + str(patch_size / 50) + ' seconds: ' + str(len(good_indices)))
@@ -41,7 +42,7 @@ def main():
     # 2) save model weights (including random init, maybe  experiment-name/date/checkpoints
     model = simple_convnet2d(nch, patch_size)
     loss_object = CompleteLikelihoodLoss(tf.Variable(tf.zeros((4, 4)), trainable=True, dtype=tf.float32),
-                          tf.Variable(tf.zeros((4,)), trainable=True, dtype=tf.float32))
+                                         tf.Variable(tf.zeros((4,)), trainable=True, dtype=tf.float32))
     optimizer_nn = tf.keras.optimizers.Adam(learning_rate=learning_rate)
 
     model.compile(optimizer=optimizer_nn, loss=loss_object, metrics=['categorical_accuracy'])
@@ -76,15 +77,6 @@ def main():
         X_train, X_dev, y_train, y_dev = train_test_split(
             features_train, labels_train, test_size=0.1, random_state=42)
 
-        # NORMALIZAR PSD
-        # como separar as features para a nossa CNN?
-        # com os envolopes separámos em patches, aqui usamos a própria dimensão da STFT?
-        # Contruir datapreparer:
-        #    - Separe o som por janelas PSD
-        #
-        # Implementar uma CNN com convoluções 2D: first approach -> mudar a nossa CNN para operações 2D.
-        # ???
-        # Profit
         dp = HybridPCGDataPreparer2D(patch_size=patch_size, number_channels=nch, num_states=4)
         dp.set_features_and_labels(X_train, y_train)
         train_dataset = tf.data.Dataset.from_generator(dp,
@@ -115,14 +107,16 @@ def main():
         dataset_np = list(train_dataset.as_numpy_iterator())
         dataset = np.array(dataset_np, dtype=object)
         labels_ = dataset[:, 1]
-        p_states, trans_mat = train_HMM_parameters(labels_)
+        _, trans_mat = train_HMM_parameters(labels_)
+        p_states = QR_steady_state_distribution(trans_mat)
         loss_object.trans_mat.assign(tf.Variable(trans_mat, trainable=True, dtype=tf.float32))
         loss_object.p_states.assign(tf.Variable(p_states, trainable=True, dtype=tf.float32))
 
         train_dataset = train_dataset.shuffle(buffer_size=400, reshuffle_each_iteration=True)
         for ep in range(num_epochs):
             print('=', end='')
-            for i, (x_train, y_train) in tqdm(enumerate(train_dataset), desc=f'training', total=len(X_train), leave=True):
+            for i, (x_train, y_train) in tqdm(enumerate(train_dataset), desc=f'training', total=len(X_train),
+                                              leave=True):
                 hmm_train_step(model=model,
                                optimizer=optimizer_nn,
                                loss_object=loss_object,
