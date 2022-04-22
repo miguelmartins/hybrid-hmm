@@ -8,9 +8,8 @@ from tensorflow.python.keras.callbacks import ModelCheckpoint
 from data_processing.signal_extraction import DataExtractor
 from data_processing.data_transformation import HybridPCGDataPreparer2D, \
     prepare_validation_data, get_train_test_indices
-from custom_train_functions.hmm_train_step import hmm_train_step, train_HMM_parameters
-from loss_functions.MMI_losses import MMILoss, CompleteLikelihoodLoss
-from models.custom_models import simple_convnet2d, bilstm_attention_fernando19_softmax
+from custom_train_functions.hmm_train_step import train_HMM_parameters
+from models.custom_models import bilstm_attention_fernando19_softmax
 from utility_functions.experiment_logs import PCGExperimentLogger
 
 from utility_functions.hmm_utilities import log_viterbi_no_marginal, QR_steady_state_distribution
@@ -38,12 +37,9 @@ def main():
     features = DataExtractor.filter_by_index(features_, good_indices)
     features = DataExtractor.get_mfccs(data=features,
                                        sampling_rate=1000,
-                                       window_length=80,
-                                       window_overlap=60,
-                                       resample=1600,
-                                       delta_delta=True,
-                                       n_mfcc=n_mfcc)
-    print(features)
+                                       window_length=150,
+                                       window_overlap=130,
+                                       n_mfcc=6)
     name = 'fernando_CE_physio16_mfcc_joint'
     experiment_logger = PCGExperimentLogger(path='../results/fernando', name=name, number_folders=number_folders)
     print('Total number of valid sounds with length > ' + str(patch_size / 50) + ' seconds: ' + str(len(good_indices)))
