@@ -2,7 +2,7 @@ import librosa
 import numpy as np
 import scipy.io as sio
 import scipy.signal
-from sklearn.preprocessing import scale
+import speechpy
 
 
 class DataExtractor:
@@ -16,14 +16,14 @@ class DataExtractor:
         return pcg_recordings, patient_ids
 
     @staticmethod
-    def downsample_signal(data, original_rate=1000, new_rate=50):
-        downsampled_data = []
+    def resample_signal(data, original_rate=1000, new_rate=50):
+        resampled_data = []
         for recording in data:
             time_secs = len(recording) / original_rate
             number_of_samples = int(time_secs * new_rate)
             # downsample from the filtered signal
-            downsampled_data.append(scipy.signal.resample(recording, number_of_samples).squeeze())
-        return np.array(downsampled_data)
+            resampled_data.append(scipy.signal.resample(recording, number_of_samples).squeeze())
+        return np.array(resampled_data)
 
     @staticmethod
     def get_power_spectrum(data, sampling_rate, window_length, window_overlap, window_type='hann'):
@@ -53,21 +53,68 @@ class DataExtractor:
         return psd_data
 
     @staticmethod
-    def get_mfccs(data, sampling_rate, window_length, window_overlap, n_mfcc, fmin=25, fmax=400):
+    def get_mfccs(data, sampling_rate, window_length, window_overlap, n_mfcc, fmin=25, fmax=400, resample=None,
+                          delta=True, delta_delta=True):
+        if resample is not None:
+            data = DataExtractor.resample_signal(data, original_rate=sampling_rate, new_rate=resample)
+            sampling_rate = resample  # TODO: this is bad practice, change after test
+
         mfcc_data = np.zeros(data.shape, dtype=object)
         _hop_length = window_length - window_overlap
         for i in range(len(data)):
             recording = data[i]
-            mfcc = librosa.feature.mfcc(recording.squeeze(),
-                                        n_fft=window_length,
-                                        sr=sampling_rate,
-                                        hop_length=_hop_length,
-                                        n_mfcc=n_mfcc,
-                                        fmin=fmin,
-                                        fmax=fmax)
-            mfcc_data[i] = mfcc.T  # switch the time domain to the first dimension
+            S = librosa.feature.melspectrogram(y=recording.squeeze(),
+                                               n_fft=window_length,
+                                               sr=sampling_rate,
+                                               hop_length=_hop_length,
+                                               fmin=fmin,
+                                               fmax=fmax,
+                                               window='hann')
+            # Convert to log scale (dB).
+            log_S = librosa.amplitude_to_db(S, ref=np.max)
+            mfcc = librosa.feature.mfcc(S=log_S, n_mfcc=n_mfcc)
+            # Transpose to [T, Mel] and normalize using Global Cepstral Mean
+            mfcc = speechpy.processing.cmvn(mfcc.T, variance_normalization=True)
+            if delta_delta is True:
+                delta_ = librosa.feature.delta(mfcc, mode='mirror')
+                delta_delta_ = librosa.feature.delta(mfcc, order=2, mode='mirror')
+                mfcc_data[i] = np.concatenate([mfcc, delta_, delta_delta_], axis=1)
+            elif delta is True:
+                delta_ = librosa.feature.delta(mfcc, mode='mirror')
+                mfcc_data[i] = np.concatenate([mfcc, delta_], axis=1)
+            else:
+                mfcc_data[i] = mfcc
 
         return mfcc_data
+
+    @staticmethod
+    def calculate_delta(coefficients, delta_diff=2):
+        """
+        Given coeffients of a delta^k mfcc, calculates delta^(k+1).
+        Normalization according to:
+        http://practicalcryptography.com/miscellaneous/machine-learning/guide-mel-frequency-cepstral-coefficients-mfccs/#deltas-and-delta-deltas
+        Parameters
+        ----------
+        coefficients : np.ndarray
+            A ndarray of shape (t, c), i.e. c coefficients for every sample t in the signal
+        delta_diff : int
+            The offset in time used to calculate the deltas
+
+        Returns
+        -------
+        np.ndarray
+            A ndarray of shape (t, c), where each t has c delta coefficients
+        """
+        delta = np.zeros(coefficients.shape)
+        norm = 2 * np.sum(np.arange(1, delta_diff + 1) ** 2)
+        for t in range(coefficients.shape[0]):
+            d_t = 0
+            for n in range(delta_diff):
+                d_t += (n + 1) * (
+                        coefficients[min(coefficients.shape[0] - 1, t + n), :] - coefficients[max(0, t - n), :]
+                )
+            delta[t, :] = d_t / norm
+        return delta
 
     @staticmethod
     def extract(path, patch_size, filter_noisy=True):

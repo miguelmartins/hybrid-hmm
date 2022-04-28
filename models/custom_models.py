@@ -105,21 +105,21 @@ class SoftAttention(Layer):
         super(SoftAttention, self).build(input_shape)
 
     def call(self, x):
-        e = K.tanh(K.dot(x, self.W) + self.b)  # patch_size x 1
+        e = tf.nn.tanh(K.dot(x, self.W) + self.b)  # patch_size x 1
         s = K.dot(tf.keras.layers.Permute((2, 1))(e), self.v)  # Permute to transpose window for each time step
-        a = K.softmax(s, axis=1)  # path_size x 1
+        a = tf.nn.softmax(s, axis=1)  # path_size x 1
         output = x * a
         if self.return_sequences:
             return output
 
-        return K.sum(output, axis=2)
+        return tf.reduce_sum(output, axis=2)
 
     def get_config(self):
         config = super().get_config().copy()
         config.update({
-            'att_weight': self.W,
-            'att_bias': self.b,
-            'context_vector': self.v
+            'att_weight': self.W.numpy(),  # convert to numpy to be json-serializable
+            'att_bias': self.b.numpy(),
+            'context_vector': self.v.numpy()
         })
         return config
 

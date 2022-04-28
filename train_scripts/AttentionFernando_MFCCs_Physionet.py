@@ -3,24 +3,30 @@ import tensorflow as tf
 
 from sklearn.metrics import accuracy_score, precision_score
 from sklearn.model_selection import train_test_split
+from tensorflow.python.keras.callbacks import ModelCheckpoint
 
 from data_processing.signal_extraction import DataExtractor
-from data_processing.data_transformation import HybridPCGDataPreparer2D, get_train_test_indices
-from custom_train_functions.hmm_train_step import hmm_train_step, train_HMM_parameters
-from loss_functions.MMI_losses import MMILoss, CompleteLikelihoodLoss
-from models.custom_models import simple_convnet2d
+from data_processing.data_transformation import HybridPCGDataPreparer2D, \
+    prepare_validation_data, get_train_test_indices
+from custom_train_functions.hmm_train_step import train_HMM_parameters
+from models.custom_models import bilstm_attention_fernando19_softmax
 from utility_functions.experiment_logs import PCGExperimentLogger
 
 from utility_functions.hmm_utilities import log_viterbi_no_marginal, QR_steady_state_distribution
 from tqdm import tqdm
 
 
+def scheduler(epoch, lr): return lr * 10 if epoch == 10 else lr
+
+
 def main():
     patch_size = 64
-    nch = 18
+    n_mfcc = 6
+    nch = n_mfcc * 3
     num_epochs = 50
     number_folders = 10
-    learning_rate = 1e-3
+    learning_rate = 0.002
+    batch_size = 32
 
     good_indices, _, labels, patient_ids, length_sounds = DataExtractor.extract(path='../datasets/PCG'
                                                                                      '/PhysioNet_SpringerFeatures_Annotated_featureFs_50_Hz_audio_ForPython.mat',
@@ -34,24 +40,21 @@ def main():
                                        window_length=150,
                                        window_overlap=130,
                                        n_mfcc=6)
-    print(features)
-    name = 'hmm_completlikelihood1e3_physio16_mfcc_joint'
-    experiment_logger = PCGExperimentLogger(path='../results/hybrid', name=name, number_folders=number_folders)
+    name = 'fernando_CE_physio16_mfcc_joint'
+    experiment_logger = PCGExperimentLogger(path='../results/fernando', name=name, number_folders=number_folders)
     print('Total number of valid sounds with length > ' + str(patch_size / 50) + ' seconds: ' + str(len(good_indices)))
     # 1) save files on a given directory, maybe experiment-name/date/results
     # 2) save model weights (including random init, maybe  experiment-name/date/checkpoints
-    model = simple_convnet2d(nch, patch_size)
-    loss_object = CompleteLikelihoodLoss(tf.Variable(tf.zeros((4, 4)), trainable=True, dtype=tf.float32),
-                                         tf.Variable(tf.zeros((4,)), trainable=True, dtype=tf.float32))
+    model = bilstm_attention_fernando19_softmax(nch, patch_size)
     optimizer_nn = tf.keras.optimizers.Adam(learning_rate=learning_rate)
 
-    model.compile(optimizer=optimizer_nn, loss=loss_object, metrics=['categorical_accuracy'])
-    model.save_weights('random_init')  # Save initialization before training
+    model.compile(optimizer=optimizer_nn, loss='categorical_crossentropy', metrics=['categorical_accuracy'])
+    model.save_weights('random_init_lstm_attention')  # Save initialization before training
 
     acc_folds, prec_folds = [], []
     for j_fold in range(number_folders):
         min_val_loss = 1e3
-        model.load_weights('random_init')  # Load random weights f.e. fold
+        model.load_weights('random_init_lstm_attention')  # Load random weights f.e. fold
         train_indices, test_indices = get_train_test_indices(good_indices=good_indices,
                                                              number_folders=number_folders,
                                                              patient_ids=patient_ids,
@@ -77,6 +80,15 @@ def main():
         X_train, X_dev, y_train, y_dev = train_test_split(
             features_train, labels_train, test_size=0.1, random_state=42)
 
+        # NORMALIZAR PSD
+        # como separar as features para a nossa CNN?
+        # com os envolopes separámos em patches, aqui usamos a própria dimensão da STFT?
+        # Contruir datapreparer:
+        #    - Separe o som por janelas PSD
+        #
+        # Implementar uma CNN com convoluções 2D: first approach -> mudar a nossa CNN para operações 2D.
+        # ???
+        # Profit
         dp = HybridPCGDataPreparer2D(patch_size=patch_size, number_channels=nch, num_states=4)
         dp.set_features_and_labels(X_train, y_train)
         train_dataset = tf.data.Dataset.from_generator(dp,
@@ -109,82 +121,66 @@ def main():
         labels_ = dataset[:, 1]
         _, trans_mat = train_HMM_parameters(labels_)
         p_states = QR_steady_state_distribution(trans_mat)
-        loss_object.trans_mat.assign(tf.Variable(trans_mat, trainable=True, dtype=tf.float32))
-        loss_object.p_states.assign(tf.Variable(p_states, trainable=True, dtype=tf.float32))
 
         train_dataset = train_dataset.shuffle(buffer_size=400, reshuffle_each_iteration=True)
-        for ep in range(num_epochs):
-            print('=', end='')
-            for i, (x_train, y_train) in tqdm(enumerate(train_dataset), desc=f'training', total=len(X_train),
-                                              leave=True):
-                hmm_train_step(model=model,
-                               optimizer=optimizer_nn,
-                               loss_object=loss_object,
-                               train_batch=x_train,
-                               label_batch=y_train,
-                               metrics=None)
-
-            # 29500        janela: 150ms    stride: 50ms (overlap=100ms)
-            #              stride = 1 / (50hz) = 20 ms /(o intervalo tem que coincidir com o periodo)
-            #              N_janelas = (|Tobs + pad| - janela) / stride + 1   -> (N_janelas , numero_freq)
-            #     sinal 10 valores -> psd com stride 2 -> (0, 2, 4, 6, 8); janela = 5 (0, 2, 4, 6
-            #     PSD deve ter output igual as anotacoes, dado que usamos o stride correcto!
-            (train_loss, train_acc) = model.evaluate(train_dataset, verbose=0)
-            print("Train Loss", train_loss, "Train_acc", train_acc)
-            (val_loss, val_acc) = model.evaluate(dev_dataset, verbose=0)
-            print("Epoch ", ep, " train loss = ", train_loss, " train accuracy = ", train_acc, "val loss = ", val_loss,
-                  "val accuracy = ", val_acc)
-            checkpoint = './checkpoints/hybrid_physion/' + str(j_fold) + '/my_checkpoint'
-            if val_loss < min_val_loss:
-                min_val_loss = val_loss
-                # SAVE MODEL
-                best_p_states = loss_object.p_states.numpy()
-                best_trans_mat = loss_object.trans_mat.numpy()
-                experiment_logger.save_model_checkpoints(model, best_p_states, best_trans_mat, '/cnn_weights_fold_',
-                                                         j_fold)
-
-        model = experiment_logger.load_model_checkpoint_weights(model)
-        loss_object.p_states.assign(tf.Variable(best_p_states, trainable=True, dtype=tf.float32))
-        loss_object.trans_mat.assign(tf.Variable(best_trans_mat, trainable=True, dtype=tf.float32))
+        checkpoint_path = experiment_logger.path + '/weights_fold' + str(j_fold) + '.hdf5'
+        model_checkpoint = ModelCheckpoint(filepath=checkpoint_path, monitor='val_loss', save_best_only=True)
+        schedule = tf.keras.callbacks.LearningRateScheduler(scheduler, verbose=0)
+        history = model.fit(train_dataset, validation_data=dev_dataset,
+                            validation_steps=1, batch_size=batch_size,
+                            epochs=num_epochs, verbose=1,
+                            shuffle=True, callbacks=[model_checkpoint, schedule])
+        experiment_logger.save_markov_state(j_fold, p_states, trans_mat)
+        model.load_weights(checkpoint_path)
         out_test = model.predict(test_dataset)
         accuracy, precision = [], []
 
-        labels_list, cnn_list, predictions_list = [], [], []
-        print(loss_object.p_states.numpy())
-        print(loss_object.trans_mat.numpy())
-        acc_cnn = []
+        labels_list, predictions_list = [], []
+
         # Viterbi algorithm in test set
         for x, y in tqdm(test_dataset, desc=f'validating (viterbi)', total=len(labels_test), leave=True):
             logits = model.predict(x)
             y = y.numpy()
-            _, _, predictions = log_viterbi_no_marginal(loss_object.p_states.numpy(), loss_object.trans_mat.numpy(),
+            _, _, predictions = log_viterbi_no_marginal(p_states, trans_mat,
                                                         logits)
             predictions = predictions.astype(np.int32)
-            cnn_preds = np.argmax(logits, axis=1)
-            cnn_list.append(cnn_preds)
             raw_labels = np.argmax(y, axis=1).astype(np.int32)
             predictions_list.append(predictions)
             labels_list.append(raw_labels)
             acc = accuracy_score(raw_labels, predictions)
-            acc_cnn.append(accuracy_score(raw_labels, cnn_preds))
             prc = precision_score(raw_labels, predictions, average=None)
             accuracy.append(acc)
             precision.append(prc)
-        print("CNN-> Average Accuracy", np.mean(acc_cnn))
-        print("Viterbi-> Mean Test Accuracy: ", np.mean(accuracy), "Mean Test Precision: ", np.mean(precision))
+        print("Mean Test Accuracy: ", np.mean(accuracy), "Mean Test Precision: ", np.mean(precision))
         acc_folds.append(np.mean(acc))
         prec_folds.append(np.mean(prc))
+        length_sounds_test = np.zeros(len(features_test))
+        for j in range(len(features_test)):
+            length_sounds_test[j] = len(features_test[j])
+
+        # recover sound labels from patch labels
+        output_probs, output_seqs = prepare_validation_data(out_test, test_indices, length_sounds_test)
+
+        sample_acc = np.zeros((len(labels_test),))
+        for j in range(len(labels_test)):
+            sample_acc[j] = 1 - (np.sum((output_seqs[j] != labels_test[j] - 1).astype(int)) / len(labels_test[j]))
+
+        print('Test mean sample accuracy for this folder:', np.sum(sample_acc) / len(sample_acc))
+        for j in range(len(labels_test)):
+            sample_acc[j] = 1 - (
+                    np.sum((predictions_list[j] != labels_test[j] - 1).astype(int)) / len(labels_test[j]))
+        print("Viterbi: ", np.sum(sample_acc) / len(sample_acc))
 
         # collecting data and results
         experiment_logger.update_results(fold=j_fold,
                                          train_indices=train_indices,
                                          test_indices=test_indices,
-                                         output_seqs=np.array(cnn_list, dtype=object),
+                                         output_seqs=output_seqs,
                                          predictions=np.array(predictions_list, dtype=object),
                                          ground_truth=np.array(labels_list, dtype=object))
 
-    experiment_logger.save_results(p_states=loss_object.p_states.numpy(),
-                                   trans_mat=loss_object.trans_mat.numpy())
+    experiment_logger.save_results(p_states=p_states,
+                                   trans_mat=trans_mat)
 
 
 if __name__ == '__main__':
