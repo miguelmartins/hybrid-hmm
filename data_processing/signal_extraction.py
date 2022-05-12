@@ -23,7 +23,6 @@ class DataExtractor:
     @staticmethod
     def extract_circor_labels(file_path, sampling_rate, sound):
         """
-
         Parameters
         ----------
         file_path: the path of the observation
@@ -37,7 +36,7 @@ class DataExtractor:
         sound_duration = len(sound) / sampling_rate
         time_indices = np.arange(start=0., stop=sound_duration, step=1 / sampling_rate)
 
-        f = np.genfromtxt(f'{file_path}.tsv', delimiter='\t')  # 0: start; 1: end; 2: state
+        f = np.genfromtxt(f'{file_path}.txt', delimiter='\t')  # 0: start; 1: end; 2: state
         labels_time = f[:, 2].astype(np.int32)
         labels_fs = np.zeros((len(time_indices)), dtype=np.int32)
         j = 0
@@ -55,27 +54,39 @@ class DataExtractor:
         return labels_fs
 
     @staticmethod
-    def read_circor_raw(dataset_path):
+    def read_circor_raw(dataset_path, discard_empty_labels=True):
         """
         Parameters
         ----------
         dataset_path: the directory containing the raw circor dataset train data
+        discard_empty_labels: a boolean to crop 0 labels
 
         Returns
         -------
             A numpy np.ndarray containing N obersvations, with features "id", "sound" and "label"
         """
         recordings = sorted([f for f in os.listdir(dataset_path) if f.endswith('.wav')])
-        labels = sorted([f for f in os.listdir(dataset_path) if f.endswith('.tsv')])
         dataset = np.zeros([len(recordings), 3], dtype=np.object)
-        for i, (recording, label) in enumerate(zip(recordings, labels)):
+        i = 0
+        for recording in recordings:
             name = re.split('\.', recording)[0]
             sampling_rate, sound = wavfile.read(f"{dataset_path}{name}.wav")
-            labels = DataExtractor.extract_circor_labels(f"{dataset_path}{name}", sampling_rate, sound)
+            try:
+                labels = DataExtractor.extract_circor_labels(f"{dataset_path}{name}", sampling_rate, sound)
+            except:
+                print(f"Skipping {name}. No .tsv file.")
+                continue
             dataset[i, 0] = f"{name}.wav"
             dataset[i, 1] = sound
+            if discard_empty_labels:
+                dataset[i, 2] = labels[np.where(labels > 0, True, False)]
             dataset[i, 2] = labels
+            i += 1
         return dataset
+
+    @staticmethod
+    def process_circor_labels(dataset):
+
 
     @staticmethod
     def resample_signal(data, original_rate=1000, new_rate=50):
