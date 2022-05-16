@@ -75,7 +75,7 @@ class DataExtractor:
         return annotated_intervals
 
     @staticmethod
-    def read_circor_raw(dataset_path, discard_empty_labels=True):
+    def read_circor_raw(dataset_path):
         """
         Parameters
         ----------
@@ -97,11 +97,9 @@ class DataExtractor:
             except:
                 print(f"Skipping {name}. No .tsv file.")
                 continue
-            dataset[i, 0] = f"{name}.wav"
-            dataset[i, 1] = sound
-            if discard_empty_labels:
-                dataset[i, 2] = np.extract(labels > 0, labels)
-            dataset[i, 2] = labels
+            annotated_intervals = DataExtractor.get_annotated_intervals(labels, name)
+            dataset[i, 1] = np.array([sound[start:end] for start, end, _ in annotated_intervals])
+            dataset[i, 2] = np.array([labels[start:end] for start, end, _ in annotated_intervals])
             i += 1
         return dataset
 
