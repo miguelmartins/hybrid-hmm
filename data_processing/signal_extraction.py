@@ -54,6 +54,27 @@ class DataExtractor:
         return labels_fs
 
     @staticmethod
+    def get_annotated_intervals(labels, name):
+        annotated_indices = np.where(labels > 0)[0]
+        if len(annotated_indices) == 0:
+            return None
+        annotated_intervals = []
+        start = end = annotated_indices[0]
+        suffix = 0
+        for i in range(1, len(annotated_indices)):
+            if (annotated_indices[i] - end) == 1:
+                end = annotated_indices[i]
+            else:
+                annotated_intervals.append((start, end, f'{name}_{suffix}'))
+                start = end = annotated_indices[i]
+                suffix += 1
+        if len(annotated_intervals) == 0:  # Condition when there are no breaks in annotation
+            annotated_intervals.append((start, end, f'{name}_{suffix}'))
+        if (start, end, f'{name}_{suffix}') != annotated_intervals[-1]:  # Condition for last element
+            annotated_intervals.append((start, end, f'{name}_{suffix}'))
+        return annotated_intervals
+
+    @staticmethod
     def read_circor_raw(dataset_path, discard_empty_labels=True):
         """
         Parameters
@@ -79,13 +100,11 @@ class DataExtractor:
             dataset[i, 0] = f"{name}.wav"
             dataset[i, 1] = sound
             if discard_empty_labels:
-                dataset[i, 2] = labels[np.where(labels > 0, True, False)]
+                dataset[i, 2] = np.extract(labels > 0, labels)
             dataset[i, 2] = labels
             i += 1
         return dataset
 
-    @staticmethod
-    def process_circor_labels(dataset):
 
 
     @staticmethod
