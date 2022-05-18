@@ -75,6 +75,16 @@ class DataExtractor:
         return annotated_intervals
 
     @staticmethod
+    def get_circor_noisy_labels(label):
+        label -= 1
+        wrong_labels = []
+        for t in range(1, len(label)):
+            if (label[t] != -1) and label[t - 1] != -1:
+                if (label[t] != label[t - 1]) and (label[t] != (label[t - 1] + 1) % 4):
+                    wrong_labels.append(t)
+        return np.array(wrong_labels)
+
+    @staticmethod
     def read_circor_raw(dataset_path):
         """
         Parameters
@@ -86,24 +96,34 @@ class DataExtractor:
         -------
             A numpy np.ndarray containing N obersvations, with features "id", "sound" and "label"
         """
+        if not dataset_path.endswith('/'):
+            print("Error. Please provide directory path.")
+            return None
         recordings = sorted([f for f in os.listdir(dataset_path) if f.endswith('.wav')])
         dataset = np.zeros([len(recordings), 3], dtype=np.object)
-        i = 0
+
+        i = skipped = 0
         for recording in recordings:
             name = re.split('\.', recording)[0]
             sampling_rate, sound = wavfile.read(f"{dataset_path}{name}.wav")
             try:
                 labels = DataExtractor.extract_circor_labels(f"{dataset_path}{name}", sampling_rate, sound)
+                if len(DataExtractor.get_circor_noisy_labels(labels)) > 0:
+                    print(f"Skipping {name}.wav.\tNoisy labels.")
+                    skipped += 1
+                    continue
             except:
-                print(f"Skipping {name}. No .tsv file.")
+                print(f"Skipping {name}.wav\tNo label file.")
+                skipped += 1
                 continue
-            annotated_intervals = DataExtractor.get_annotated_intervals(labels, name)
-            dataset[i, 1] = np.array([sound[start:end] for start, end, _ in annotated_intervals])
-            dataset[i, 2] = np.array([labels[start:end] for start, end, _ in annotated_intervals])
+            dataset[i, 0] = f"{name}.wav"
+            dataset[i, 1] = sound
+            dataset[i, 2] = labels
+            # annotated_intervals = DataExtractor.get_annotated_intervals(labels, name)
+            # dataset[i, 1] = np.array([sound[start:end] for start, end, _ in annotated_intervals])
+            # dataset[i, 2] = np.array([labels[start:end] for start, end, _ in annotated_intervals])
             i += 1
-        return dataset
-
-
+        return dataset[:-skipped] if skipped > 0 else dataset
 
     @staticmethod
     def resample_signal(data, original_rate=1000, new_rate=50):
@@ -144,7 +164,7 @@ class DataExtractor:
 
     @staticmethod
     def get_mfccs(data, sampling_rate, window_length, window_overlap, n_mfcc, fmin=25, fmax=400, resample=None,
-                          delta=True, delta_delta=True):
+                  delta=True, delta_delta=True):
         if resample is not None:
             data = DataExtractor.resample_signal(data, original_rate=sampling_rate, new_rate=resample)
             sampling_rate = resample  # TODO: this is bad practice, change after test
