@@ -126,6 +126,11 @@ class DataExtractor:
         return dataset[:-skipped] if skipped > 0 else dataset
 
     @staticmethod
+    def resample_labels(label, sampling_rate, new_rate):
+        indices = np.arange(start=0, step=int(sampling_rate / new_rate), stop=len(label))
+        return label[indices]
+
+    @staticmethod
     def resample_signal(data, original_rate=1000, new_rate=50):
         resampled_data = []
         for recording in data:
