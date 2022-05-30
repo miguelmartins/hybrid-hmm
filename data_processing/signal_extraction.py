@@ -54,24 +54,22 @@ class DataExtractor:
         return labels_fs
 
     @staticmethod
-    def get_annotated_intervals(labels, name):
+    def get_annotated_intervals(labels):
         annotated_indices = np.where(labels > 0)[0]
         if len(annotated_indices) == 0:
             return None
         annotated_intervals = []
         start = end = annotated_indices[0]
-        suffix = 0
         for i in range(1, len(annotated_indices)):
             if (annotated_indices[i] - end) == 1:
                 end = annotated_indices[i]
             else:
-                annotated_intervals.append((start, end, f'{name}_{suffix}'))
+                annotated_intervals.append((start, end))
                 start = end = annotated_indices[i]
-                suffix += 1
         if len(annotated_intervals) == 0:  # Condition when there are no breaks in annotation
-            annotated_intervals.append((start, end, f'{name}_{suffix}'))
-        if (start, end, f'{name}_{suffix}') != annotated_intervals[-1]:  # Condition for last element
-            annotated_intervals.append((start, end, f'{name}_{suffix}'))
+            annotated_intervals.append((start, end))
+        if (start, end) != annotated_intervals[-1]:  # Condition for last element
+            annotated_intervals.append((start, end))
         return annotated_intervals
 
     @staticmethod
@@ -143,6 +141,21 @@ class DataExtractor:
             diff = dataset[i, 2].shape[0] - dataset[i, 1].shape[0]
             if diff != 0:
                 dataset[i, 2] = dataset[i, 2][:-diff]
+        return dataset
+
+    @staticmethod
+    def discard_invalid_intervals(dataset):
+        for i in range(len(dataset)):
+            annotated_intervals = DataExtractor.get_annotated_intervals(dataset[i, 2])
+            dataset[i, 1] = np.array([dataset[i, 1][start:end] for start, end in annotated_intervals]).squeeze()
+            dataset[i, 2] = np.array([dataset[i, 2][start:end] for start, end in annotated_intervals]).squeeze()
+        return dataset
+
+    @staticmethod
+    def extract_circor_raw(dataset_path, extension='txt'):
+        dataset = DataExtractor.read_circor_raw(dataset_path, extension)
+        dataset = DataExtractor.align_downsampled_dataset(dataset)
+        dataset = DataExtractor.discard_invalid_intervals(dataset)
         return dataset
 
     @staticmethod
