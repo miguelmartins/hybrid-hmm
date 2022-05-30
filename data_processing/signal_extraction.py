@@ -75,12 +75,13 @@ class DataExtractor:
         return annotated_intervals
 
     @staticmethod
-    def get_circor_noisy_labels(label):
-        label -= 1
+    def get_circor_noisy_labels(label_):
+        label_ = np.copy(label_)
+        label_ -= 1
         wrong_labels = []
-        for t in range(1, len(label)):
-            if (label[t] != -1) and label[t - 1] != -1:
-                if (label[t] != label[t - 1]) and (label[t] != (label[t - 1] + 1) % 4):
+        for t in range(1, len(label_)):
+            if (label_[t] != -1) and label_[t - 1] != -1:
+                if (label_[t] != label_[t - 1]) and (label_[t] != (label_[t - 1] + 1) % 4):
                     wrong_labels.append(t)
         return np.array(wrong_labels)
 
@@ -101,7 +102,6 @@ class DataExtractor:
             return None
         recordings = sorted([f for f in os.listdir(dataset_path) if f.endswith('.wav')])
         dataset = np.zeros([len(recordings), 3], dtype=np.object)
-
         i = skipped = 0
         for recording in recordings:
             name = re.split('\.', recording)[0]
@@ -119,16 +119,20 @@ class DataExtractor:
             dataset[i, 0] = f"{name}.wav"
             dataset[i, 1] = sound
             dataset[i, 2] = labels
-            # annotated_intervals = DataExtractor.get_annotated_intervals(labels, name)
-            # dataset[i, 1] = np.array([sound[start:end] for start, end, _ in annotated_intervals])
-            # dataset[i, 2] = np.array([labels[start:end] for start, end, _ in annotated_intervals])
             i += 1
-        return dataset[:-skipped] if skipped > 0 else dataset
+
+        dataset = dataset[:-skipped] if skipped > 0 else dataset
+        dataset[:, 1] = DataExtractor.resample_signal(dataset[:, 1], original_rate=4000, new_rate=50)
+        dataset[:, 2] = DataExtractor.resample_labels(dataset[:, 2], original_rate=4000, new_rate=50)
+        return dataset
 
     @staticmethod
-    def resample_labels(label, sampling_rate, new_rate):
-        indices = np.arange(start=0, step=int(sampling_rate / new_rate), stop=len(label))
-        return label[indices]
+    def resample_labels(labels, original_rate, new_rate):
+        resampled_labels = []
+        for label in labels:
+            indices = np.arange(start=0, step=int(original_rate / new_rate), stop=len(label))
+            resampled_labels.append(label[indices])
+        return np.array(resampled_labels)
 
     @staticmethod
     def resample_signal(data, original_rate=1000, new_rate=50):
