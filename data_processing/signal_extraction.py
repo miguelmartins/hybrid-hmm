@@ -21,7 +21,7 @@ class DataExtractor:
         return pcg_recordings, patient_ids
 
     @staticmethod
-    def extract_circor_labels(file_path, sampling_rate, sound):
+    def extract_circor_labels(file_path, sampling_rate, sound, extension='txt'):
         """
         Parameters
         ----------
@@ -36,7 +36,7 @@ class DataExtractor:
         sound_duration = len(sound) / sampling_rate
         time_indices = np.arange(start=0., stop=sound_duration, step=1 / sampling_rate)
 
-        f = np.genfromtxt(f'{file_path}.txt', delimiter='\t')  # 0: start; 1: end; 2: state
+        f = np.genfromtxt(f'{file_path}.{extension}', delimiter='\t')  # 0: start; 1: end; 2: state
         labels_time = f[:, 2].astype(np.int32)
         labels_fs = np.zeros((len(time_indices)), dtype=np.int32)
         j = 0
@@ -86,12 +86,12 @@ class DataExtractor:
         return np.array(wrong_labels)
 
     @staticmethod
-    def read_circor_raw(dataset_path):
+    def read_circor_raw(dataset_path, extension='txt'):
         """
         Parameters
         ----------
+        extension: the extension of the label files
         dataset_path: the directory containing the raw circor dataset train data
-        discard_empty_labels: a boolean to crop 0 labels
 
         Returns
         -------
@@ -107,7 +107,10 @@ class DataExtractor:
             name = re.split('\.', recording)[0]
             sampling_rate, sound = wavfile.read(f"{dataset_path}{name}.wav")
             try:
-                labels = DataExtractor.extract_circor_labels(f"{dataset_path}{name}", sampling_rate, sound)
+                labels = DataExtractor.extract_circor_labels(f"{dataset_path}{name}",
+                                                             sampling_rate,
+                                                             sound,
+                                                             extension=extension)
                 if len(DataExtractor.get_circor_noisy_labels(labels)) > 0:
                     print(f"Skipping {name}.wav.\tNoisy labels.")
                     skipped += 1
@@ -133,6 +136,14 @@ class DataExtractor:
             indices = np.arange(start=0, step=int(original_rate / new_rate), stop=len(label))
             resampled_labels.append(label[indices])
         return np.array(resampled_labels)
+
+    @staticmethod
+    def align_downsampled_dataset(dataset):
+        for i in range(len(dataset)):
+            diff = dataset[i, 2].shape[0] - dataset[i, 1].shape[0]
+            if diff != 0:
+                dataset[i, 2] = dataset[i, 2][:-diff]
+        return dataset
 
     @staticmethod
     def resample_signal(data, original_rate=1000, new_rate=50):
