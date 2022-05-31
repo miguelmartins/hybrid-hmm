@@ -156,16 +156,17 @@ class DataExtractor:
         obs_per_row = np.array([obs[1].shape[0] for obs in dataset])
         total_obs = np.sum(obs_per_row)
         dataset_ = np.zeros((total_obs, 3), dtype=object)
-        i = 0
+        j = i = 0
         while i < len(obs_per_row):
-            dataset_[i, 0] = name = dataset[i, 0]
-            dataset_[i, 1] = dataset[i, 1][0]
-            dataset_[i, 2] = dataset[i, 2][0]
-            for j in range(1, obs_per_row[i]):
-                dataset_[i + j, 0] = f'{name}_{j}'
-                dataset_[i + j, 1] = dataset[i, 1][j]
-                dataset_[i + j, 2] = dataset[i, 2][j]
-            i = i + obs_per_row[i]
+            dataset_[j, 0] = name = dataset[i, 0]
+            dataset_[j, 1] = dataset[i, 1][0]
+            dataset_[j, 2] = dataset[i, 2][0]
+            for k in range(1, obs_per_row[i]):
+                dataset_[j + k, 0] = f'{name}_{k}'
+                dataset_[j + k, 1] = dataset[i, 1][k]
+                dataset_[j + k, 2] = dataset[i, 2][k]
+            j = j + obs_per_row[i]
+            i = i + 1
         return dataset_
 
     @staticmethod
