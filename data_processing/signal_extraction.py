@@ -84,7 +84,7 @@ class DataExtractor:
         return np.array(wrong_labels)
 
     @staticmethod
-    def read_circor_raw(dataset_path, extension='txt'):
+    def read_circor_raw(dataset_path, resample=None, extension='txt'):
         """
         Parameters
         ----------
@@ -123,8 +123,9 @@ class DataExtractor:
             i += 1
 
         dataset = dataset[:-skipped] if skipped > 0 else dataset
-        dataset[:, 1] = DataExtractor.resample_signal(dataset[:, 1], original_rate=4000, new_rate=50)
-        dataset[:, 2] = DataExtractor.resample_labels(dataset[:, 2], original_rate=4000, new_rate=50)
+        if resample is not None:
+            dataset[:, 1] = DataExtractor.resample_signal(dataset[:, 1], original_rate=4000, new_rate=50)
+            dataset[:, 2] = DataExtractor.resample_labels(dataset[:, 2], original_rate=4000, new_rate=50)
         return dataset
 
     @staticmethod
@@ -170,8 +171,8 @@ class DataExtractor:
         return dataset_
 
     @staticmethod
-    def extract_circor_raw(dataset_path, extension='txt'):
-        dataset = DataExtractor.read_circor_raw(dataset_path, extension)
+    def extract_circor_raw(dataset_path, resample=None, extension='txt'):
+        dataset = DataExtractor.read_circor_raw(dataset_path, resample, extension)
         dataset = DataExtractor.align_downsampled_dataset(dataset)
         dataset = DataExtractor.discard_invalid_intervals(dataset)
         dataset = DataExtractor.split_intervals_into_rows(dataset)
