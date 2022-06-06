@@ -148,8 +148,8 @@ class DataExtractor:
     def discard_invalid_intervals(dataset):
         for i in range(len(dataset)):
             annotated_intervals = DataExtractor.get_annotated_intervals(dataset[i, 2])
-            dataset[i, 1] = np.array([dataset[i, 1][start:end] for start, end in annotated_intervals])
-            dataset[i, 2] = np.array([dataset[i, 2][start:end] for start, end in annotated_intervals])
+            dataset[i, 1] = np.array([dataset[i, 1][start:end] for start, end in annotated_intervals], dtype=object)
+            dataset[i, 2] = np.array([dataset[i, 2][start:end] for start, end in annotated_intervals], dtype=object)
         return dataset
 
     @staticmethod
@@ -169,6 +169,24 @@ class DataExtractor:
             j = j + obs_per_row[i]
             i = i + 1
         return dataset_
+
+    @staticmethod
+    def patient_ids_only(patients_col):
+        def pattern_match(pattern, string):
+            start, end = re.search(pattern, string).span()
+            return string[start:end]
+
+        return np.array([int(pattern_match('\d*', patient)) for patient in patients_col])
+
+    @staticmethod
+    def circor_to_mat(dataset, output='datasets/PCG/circor_dataset.mat'):
+        ids = DataExtractor.patient_ids_only(dataset[:, 0])
+        features = dataset[:, 1]
+        labels = dataset[:, 2]
+        cell_dict = {"patient_number": ids,
+                     "audio_data": features,
+                     "label": labels}
+        sio.savemat(output, cell_dict)
 
     @staticmethod
     def extract_circor_raw(dataset_path, resample=None, extension='txt'):
