@@ -224,3 +224,22 @@ def get_train_test_indices(*, good_indices, number_folders, patient_ids, fold):
     train_indices = np.array(train_indexes_norep)
 
     return train_indices, test_indices
+
+
+def get_fold_indices(dataset, n=10):
+    #  Calculate the splits in a 1D array
+    fold_indices = np.arange(start=0, step=int(np.floor(dataset.shape[0] / n)), stop=dataset.shape[0])
+    if fold_indices[-1] != len(dataset):  # Corner case when fold dim is not divisible by length of dataset
+        fold_indices[-1] = len(dataset)
+    all_indices = np.arange(len(dataset))
+
+    # Use the fold splits in 2x1 groups to set the indices range for test
+    test_idx = np.array(
+        [np.arange(start=fold_indices[i], stop=fold_indices[i + 1]) for i in range(len(fold_indices) - 1)],
+        dtype=object)
+
+    train_idx = []  # Remove by set operation ALL_INDICES - TEST_INDICES f.e. fold
+    for i in range(n):
+        train_idx.append(np.delete(all_indices, test_idx[i]))
+    train_idx = np.array(train_idx, dtype=object)
+    return train_idx, test_idx
