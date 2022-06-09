@@ -129,12 +129,12 @@ class DataExtractor:
         return dataset
 
     @staticmethod
-    def resample_labels(labels, original_rate, new_rate):
+    def resample_labels(labels, original_rate, new_rate, start=0):
         resampled_labels = []
         for label in labels:
-            indices = np.arange(start=0, step=int(original_rate / new_rate), stop=len(label))
+            indices = np.arange(start=start, step=int(original_rate / new_rate), stop=len(label))
             resampled_labels.append(label[indices])
-        return np.array(resampled_labels)
+        return np.array(resampled_labels, dtype=object)
 
     @staticmethod
     def align_downsampled_dataset(dataset):
