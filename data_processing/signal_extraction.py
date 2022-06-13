@@ -328,3 +328,10 @@ class DataExtractor:
     @staticmethod
     def filter_by_index(processed_features, indices):
         return processed_features[indices]
+
+
+class CircorExtractor:
+    @staticmethod
+    def filter_smaller_than_patch(patch_size, features):
+        # remove sounds shorter than patch size (and record sound indexes)
+        return np.array([j for j in range(len(features)) if len(features[j]) >= patch_size])
