@@ -325,7 +325,11 @@ def train_HMM_parameters(labels_arr):
                     same_count += 1
                 if (labels_cat[j] == s) and (labels_cat[j + 1] == (s + 1) % 4):
                     next_count += 1
-            trans_mat[s][s] = same_count / (same_count + next_count)
-            trans_mat[s][(s + 1) % 4] = next_count / (same_count + next_count)
+            if (same_count + next_count) == 0:
+                trans_mat[s][s] = 0
+                trans_mat[s][(s + 1) % 4] = 0
+            else:
+                trans_mat[s][s] = same_count / (same_count + next_count)
+                trans_mat[s][(s + 1) % 4] = next_count / (same_count + next_count)
 
     return p_states, trans_mat
