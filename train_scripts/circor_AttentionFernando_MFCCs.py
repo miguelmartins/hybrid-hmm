@@ -77,7 +77,8 @@ def main():
 
         X_train, X_dev, y_train, y_dev = train_test_split(
             features_train, labels_train, test_size=0.1, random_state=42)
-
+        _, trans_mat = train_HMM_parameters(y_train, one_hot=False)
+        p_states = QR_steady_state_distribution(trans_mat)
         # NORMALIZAR PSD
         # como separar as features para a nossa CNN?
         # com os envolopes separámos em patches, aqui usamos a própria dimensão da STFT?
@@ -113,12 +114,6 @@ def main():
                                                           tf.TensorSpec(shape=(None, 4), dtype=tf.float32))
                                                       ).cache().prefetch(buffer_size=tf.data.AUTOTUNE)
 
-        # MLE Estimation for HMM
-        dataset_np = list(train_dataset.as_numpy_iterator())
-        dataset = np.array(dataset_np, dtype=object)
-        labels_ = dataset[:, 1]
-        _, trans_mat = train_HMM_parameters(labels_)
-        p_states = QR_steady_state_distribution(trans_mat)
 
         train_dataset = train_dataset.shuffle(buffer_size=400, reshuffle_each_iteration=True)
         checkpoint_path = experiment_logger.path + '/weights_fold' + str(j_fold) + '.hdf5'

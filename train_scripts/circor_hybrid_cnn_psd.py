@@ -6,7 +6,7 @@ from sklearn.model_selection import train_test_split
 
 from data_processing.signal_extraction import DataExtractor, CircorExtractor
 from data_processing.data_transformation import HybridPCGDataPreparer2D, \
-    prepare_validation_data, get_train_test_indices
+    prepare_validation_data, get_train_test_indices, get_data_from_hybrid_generator
 from tqdm import tqdm
 from custom_train_functions.hmm_train_step import hmm_train_step, train_HMM_parameters
 from loss_functions.MMI_losses import CompleteLikelihoodLoss
@@ -22,6 +22,7 @@ def main():
     num_epochs = 50
     number_folders = 10
     learning_rate = 1e-3
+    BATCH_SIZE = 1
 
     circor = np.load('../datasets/PCG/circor_final/npy_and_mat/circor_dataset4khz_labels50hz.npy', allow_pickle=True)
     patient_ids = circor[:, 0]
@@ -74,6 +75,10 @@ def main():
         X_train, X_dev, y_train, y_dev = train_test_split(
             features_train, labels_train, test_size=0.1, random_state=42)
 
+        p_states, trans_mat = train_HMM_parameters(y_train, one_hot=False)
+        loss_object.trans_mat.assign(tf.Variable(trans_mat, trainable=True, dtype=tf.float32))
+        loss_object.p_states.assign(tf.Variable(p_states, trainable=True, dtype=tf.float32))
+
         # NORMALIZAR PSD
         # como separar as features para a nossa CNN?
         # com os envolopes separámos em patches, aqui usamos a própria dimensão da STFT?
@@ -110,12 +115,6 @@ def main():
                                                       ).cache().prefetch(buffer_size=tf.data.AUTOTUNE)
 
         # MLE Estimation for HMM
-        dataset_np = list(train_dataset.as_numpy_iterator())
-        dataset = np.array(dataset_np, dtype=object)
-        labels_ = dataset[:, 1]
-        p_states, trans_mat = train_HMM_parameters(labels_)
-        loss_object.trans_mat.assign(tf.Variable(trans_mat, trainable=True, dtype=tf.float32))
-        loss_object.p_states.assign(tf.Variable(p_states, trainable=True, dtype=tf.float32))
 
         for ep in range(num_epochs):
             print('=', end='')

@@ -309,12 +309,14 @@ def test_step(*, model, loss_object, x_test, y_test, metrics):
                 metric(loss_value)
 
 
-def train_HMM_parameters(labels_arr):
+def train_HMM_parameters(labels_arr, one_hot=True):
     for labels in labels_arr:
         p_states = np.zeros((4,))
         trans_mat = np.zeros((4, 4))
-
-        labels_cat = np.argmax(labels, axis=1)
+        if one_hot:
+            labels_cat = np.argmax(labels, axis=1)
+        else:
+            labels_cat = labels - 1
 
         for s in range(4):
             p_states[s] = len(np.argwhere(labels_cat == s)) / len(labels_cat)
