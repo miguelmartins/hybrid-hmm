@@ -126,15 +126,15 @@ class HybridPCGDataPreparer2D(HybridPCGDataPreparer):
     def _split_PCG_features(self, sound, label):
         n = len(label)
         sound = sound.reshape(sound.shape + (1,))
-        x_padded_temp = np.concatenate((np.zeros((int(self.patch_size / 2), self.number_channels, 1)), sound), axis=0)
-        x_padded = np.concatenate((x_padded_temp, np.zeros((int(self.patch_size / 2) - 1, self.number_channels, 1))),
-                                  axis=0)
-        x_array = np.zeros((n, self.patch_size, self.number_channels, 1))
-        s_array = np.zeros((n, 4))
+        pad_value = int(self.patch_size / 2)
+        x_padded = np.pad(sound, ((pad_value, pad_value-1), (0, 0), (0, 0)), 'constant',
+                          constant_values=(0))
+        x_array = []
+        s_array = []
         for j in range(0, n):
-            x_array[j, :, :] = x_padded[j:j + self.patch_size, :]
-            s_array[j, :] = label[j, :]
-        return x_array, s_array
+            x_array.append(x_padded[j:j + self.patch_size, :])
+            s_array.append(label[j, :])
+        return np.array(x_array, dtype=object), np.array(s_array, dtype=object)
 
 
 def get_data_from_generator(*, data_processor, batch_size, patch_size, number_channels, number_classes, trainable=True):
@@ -142,6 +142,21 @@ def get_data_from_generator(*, data_processor, batch_size, patch_size, number_ch
                                           output_signature=(
                                               tf.TensorSpec(shape=(patch_size, number_channels), dtype=tf.float32),
                                               tf.TensorSpec(shape=(patch_size, number_classes), dtype=tf.float32))
+                                          )
+    if trainable:
+        data = data.shuffle(5000, reshuffle_each_iteration=True)
+    data = data.batch(batch_size)
+    data = data.prefetch(tf.data.AUTOTUNE)
+    return data
+
+
+def get_data_from_hybrid_generator(*, data_processor, batch_size, patch_size, number_channels, number_classes,
+                                   trainable=True):
+    data = tf.data.Dataset.from_generator(data_processor,
+                                          output_signature=(
+                                              tf.TensorSpec(shape=(None, patch_size, number_channels, 1),
+                                                            dtype=tf.float32),
+                                              tf.TensorSpec(shape=(None, number_classes), dtype=tf.float32))
                                           )
     if trainable:
         data = data.shuffle(5000, reshuffle_each_iteration=True)
