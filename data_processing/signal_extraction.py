@@ -8,6 +8,7 @@ import speechpy
 import re
 
 from scipy.io import wavfile
+from tqdm import tqdm
 
 
 class DataExtractor:
@@ -194,6 +195,7 @@ class DataExtractor:
         dataset = DataExtractor.align_downsampled_dataset(dataset)
         dataset = DataExtractor.discard_invalid_intervals(dataset)
         dataset = DataExtractor.split_intervals_into_rows(dataset)
+        dataset[:, 0] = DataExtractor.patient_ids_only(dataset[:, 0])
         return dataset
 
     @staticmethod
@@ -209,7 +211,7 @@ class DataExtractor:
     @staticmethod
     def get_power_spectrum(data, sampling_rate, window_length, window_overlap, window_type='hann'):
         psd_data = np.zeros(data.shape, dtype=object)
-        for i in range(len(data)):
+        for i in tqdm(range(len(data)), 'Extracting PSD', total=len(data), leave=True):
             recording = data[i]
             # Apply high-pass and low pass order 2 Butterworth filters with respective 25 and 400 Hz cut-offs
             sos_hp = scipy.signal.butter(N=2, Wn=25, btype='highpass', analog=False, fs=sampling_rate, output='sos')
