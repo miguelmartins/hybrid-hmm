@@ -1,19 +1,18 @@
 import numpy as np
 import tensorflow as tf
-
 from sklearn.metrics import accuracy_score, precision_score
 from sklearn.model_selection import train_test_split
 
 from data_processing.signal_extraction import DataExtractor, CircorExtractor
 from data_processing.data_transformation import HybridPCGDataPreparer2D, \
-    prepare_validation_data, get_train_test_indices, get_data_from_hybrid_generator
+     get_train_test_indices
 from tqdm import tqdm
 from custom_train_functions.hmm_train_step import hmm_train_step, train_HMM_parameters
 from loss_functions.MMI_losses import CompleteLikelihoodLoss
 from models.custom_models import simple_convnet2d
 from utility_functions.experiment_logs import PCGExperimentLogger
 
-from utility_functions.hmm_utilities import log_viterbi_no_marginal
+from utility_functions.hmm_utilities import log_viterbi_no_marginal, QR_steady_state_distribution
 
 
 def main():
@@ -22,19 +21,18 @@ def main():
     num_epochs = 50
     number_folders = 10
     learning_rate = 1e-3
-    BATCH_SIZE = 1
 
-    circor = np.load('../datasets/PCG/circor_final/npy_and_mat/circor_dataset4khz_labels50hz.npy', allow_pickle=True)
-    patient_ids = circor[:, 0]
-    features = circor[:, 1]
-    labels = circor[:, 2].T
-    good_indices = CircorExtractor.filter_smaller_than_patch(patch_size, features)
+    patient_ids, features, labels = CircorExtractor.from_mat('../datasets/circor_final_labels50hz.mat')
+    features = CircorExtractor.normalize_signal(features)
     features = DataExtractor.get_power_spectrum(data=features,
                                                 sampling_rate=1000,
                                                 window_length=150,
                                                 window_overlap=130,
                                                 window_type='hann')
-    name = 'hmm_completlikelihood1e3_physio16_psd_joint'
+    # features = CircorExtractor.align_psd_labels(features, labels)
+    good_indices = CircorExtractor.filter_smaller_than_patch(patch_size, features)
+
+    name = 'hmm_completlikelihood1e3_circor_psd_joint'
     experiment_logger = PCGExperimentLogger(path='../results/hybrid/circor', name=name, number_folders=number_folders)
     print('Total number of valid sounds with length > ' + str(patch_size / 50) + ' seconds: ' + str(len(good_indices)))
     # 1) save files on a given directory, maybe experiment-name/date/results
@@ -60,6 +58,7 @@ def main():
 
         print('Considering folder number:', j_fold + 1)
         # This ia residual code from the initial implementation, kept for "panicky" reasons
+
         train_indices = good_indices[train_indices]
         test_indices = good_indices[test_indices]
 
@@ -75,19 +74,11 @@ def main():
         X_train, X_dev, y_train, y_dev = train_test_split(
             features_train, labels_train, test_size=0.1, random_state=42)
 
-        p_states, trans_mat = train_HMM_parameters(y_train, one_hot=False)
+        _, trans_mat = train_HMM_parameters(y_train, one_hot=False)
+        p_states = QR_steady_state_distribution(trans_mat)
         loss_object.trans_mat.assign(tf.Variable(trans_mat, trainable=True, dtype=tf.float32))
         loss_object.p_states.assign(tf.Variable(p_states, trainable=True, dtype=tf.float32))
 
-        # NORMALIZAR PSD
-        # como separar as features para a nossa CNN?
-        # com os envolopes separámos em patches, aqui usamos a própria dimensão da STFT?
-        # Contruir datapreparer:
-        #    - Separe o som por janelas PSD
-        #
-        # Implementar uma CNN com convoluções 2D: first approach -> mudar a nossa CNN para operações 2D.
-        # ???
-        # Profit
         dp = HybridPCGDataPreparer2D(patch_size=patch_size, number_channels=nch, num_states=4)
         dp.set_features_and_labels(X_train, y_train)
         train_dataset = tf.data.Dataset.from_generator(dp,
@@ -95,7 +86,7 @@ def main():
                                                            tf.TensorSpec(shape=(None, patch_size, nch, 1),
                                                                          dtype=tf.float32),
                                                            tf.TensorSpec(shape=(None, 4), dtype=tf.float32))
-                                                       ).cache().prefetch(buffer_size=tf.data.AUTOTUNE)
+                                                       )
         dev_dp = HybridPCGDataPreparer2D(patch_size=patch_size, number_channels=nch, num_states=4)
         dev_dp.set_features_and_labels(X_dev, y_dev)
         dev_dataset = tf.data.Dataset.from_generator(dev_dp,
@@ -103,7 +94,7 @@ def main():
                                                          tf.TensorSpec(shape=(None, patch_size, nch, 1),
                                                                        dtype=tf.float32),
                                                          tf.TensorSpec(shape=(None, 4), dtype=tf.float32))
-                                                     ).cache().prefetch(buffer_size=tf.data.AUTOTUNE)
+                                                     )
 
         test_dp = HybridPCGDataPreparer2D(patch_size=patch_size, number_channels=nch, num_states=4)
         test_dp.set_features_and_labels(features_test, labels_test)
@@ -112,10 +103,7 @@ def main():
                                                           tf.TensorSpec(shape=(None, patch_size, nch, 1),
                                                                         dtype=tf.float32),
                                                           tf.TensorSpec(shape=(None, 4), dtype=tf.float32))
-                                                      ).cache().prefetch(buffer_size=tf.data.AUTOTUNE)
-
-        # MLE Estimation for HMM
-
+                                                      )
         for ep in range(num_epochs):
             print('=', end='')
             for i, (x_train, y_train) in tqdm(enumerate(train_dataset), desc=f'training', total=len(X_train),
@@ -126,12 +114,6 @@ def main():
                                train_batch=x_train,
                                label_batch=y_train,
                                metrics=None)
-
-            # 29500        janela: 150ms    stride: 50ms (overlap=100ms)
-            #              stride = 1 / (50hz) = 20 ms /(o intervalo tem que coincidir com o periodo)
-            #              N_janelas = (|Tobs + pad| - janela) / stride + 1   -> (N_janelas , numero_freq)
-            #     sinal 10 valores -> psd com stride 2 -> (0, 2, 4, 6, 8); janela = 5 (0, 2, 4, 6
-            #     PSD deve ter output igual as anotacoes, dado que usamos o stride correcto!
             (train_loss, train_acc) = model.evaluate(train_dataset, verbose=0)
             print("Train Loss", train_loss, "Train_acc", train_acc)
             (val_loss, val_acc) = model.evaluate(dev_dataset, verbose=0)

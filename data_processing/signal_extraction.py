@@ -201,12 +201,12 @@ class DataExtractor:
     @staticmethod
     def resample_signal(data, original_rate=1000, new_rate=50):
         resampled_data = []
-        for recording in data:
+        for recording in tqdm(data, 'Normalizing recordings', total=len(data), leave=True):
             time_secs = len(recording) / original_rate
             number_of_samples = int(time_secs * new_rate)
             # downsample from the filtered signal
             resampled_data.append(scipy.signal.resample(recording, number_of_samples).squeeze())
-        return np.array(resampled_data)
+        return np.array(resampled_data, dtype=object)
 
     @staticmethod
     def get_power_spectrum(data, sampling_rate, window_length, window_overlap, window_type='hann'):
@@ -333,6 +333,29 @@ class DataExtractor:
 
 
 class CircorExtractor:
+    @staticmethod
+    def from_mat(path):
+        def transpose(arr):
+            return np.array([a.T for a in arr], dtype=object)
+
+        def get_id(arr):
+            return np.array([int(a) for a in arr])
+
+        data = sio.loadmat(path)
+        circor = data['circor_dataset']
+        patient_ids = get_id(circor[:, 0])
+        features = transpose(circor[:, 1])
+        features = DataExtractor.resample_signal(features, original_rate=4000, new_rate=1000)
+        labels = np.array([a.T.squeeze() for a in circor[:, 2]], dtype=object)
+        return patient_ids, features, labels
+
+    @staticmethod
+    def normalize_signal(features):
+        def normalize(feature):
+            return (feature - np.mean(feature)) / np.var(feature)
+
+        return np.array([normalize(feature) for feature in features], dtype=object)
+
     @staticmethod
     def filter_smaller_than_patch(patch_size, features):
         # remove sounds shorter than patch size (and record sound indexes)
