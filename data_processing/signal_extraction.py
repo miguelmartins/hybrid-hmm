@@ -202,10 +202,14 @@ class DataExtractor:
     def resample_signal(data, original_rate=1000, new_rate=50):
         resampled_data = []
         for recording in tqdm(data, 'Normalizing recordings', total=len(data), leave=True):
+            sos_hp = scipy.signal.butter(N=2, Wn=25, btype='highpass', analog=False, fs=original_rate, output='sos')
+            sos_lp = scipy.signal.butter(N=2, Wn=400, btype='lowpass', analog=False, fs=original_rate, output='sos')
+            filtered = scipy.signal.sosfilt(sos_hp, recording)
+            filtered = scipy.signal.sosfilt(sos_lp, filtered)
             time_secs = len(recording) / original_rate
             number_of_samples = int(time_secs * new_rate)
             # downsample from the filtered signal
-            resampled_data.append(scipy.signal.resample(recording, number_of_samples).squeeze())
+            resampled_data.append(scipy.signal.resample(filtered, number_of_samples).squeeze())
         return np.array(resampled_data, dtype=object)
 
     @staticmethod

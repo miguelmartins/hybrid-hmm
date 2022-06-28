@@ -1,6 +1,6 @@
 import numpy as np
 import tensorflow as tf
-
+import scipy.io as sio
 from sklearn.metrics import accuracy_score, precision_score
 from sklearn.model_selection import train_test_split
 from tensorflow.python.keras.callbacks import ModelCheckpoint
@@ -28,17 +28,15 @@ def main():
     learning_rate = 0.002
     batch_size = 32
 
-    circor = np.load('../datasets/PCG/circor_final/npy_and_mat/circor_dataset4khz_labels50hz.npy', allow_pickle=True)
-    patient_ids = circor[:, 0]
-    features = np.array([ft.astype(np.float32) for ft in circor[:, 1]], dtype=object)
-    labels = circor[:, 2].T
-    good_indices = CircorExtractor.filter_smaller_than_patch(patch_size, features)
-    features = DataExtractor.filter_by_index(features, good_indices)
+    patient_ids, features, labels = CircorExtractor.from_mat('../datasets/circor_final_labels50hz.mat')
+    features = CircorExtractor.normalize_signal(features)
     features = DataExtractor.get_mfccs(data=features,
                                        sampling_rate=1000,
                                        window_length=150,
                                        window_overlap=130,
                                        n_mfcc=6)
+    # features = CircorExtractor.align_psd_labels(features, labels)
+    good_indices = CircorExtractor.filter_smaller_than_patch(patch_size, features)
     name = 'fernando_CE_physio16_mfcc_joint'
     experiment_logger = PCGExperimentLogger(path='../results/fernando/circor', name=name, number_folders=number_folders)
     print('Total number of valid sounds with length > ' + str(patch_size / 50) + ' seconds: ' + str(len(good_indices)))
@@ -79,15 +77,7 @@ def main():
             features_train, labels_train, test_size=0.1, random_state=42)
         _, trans_mat = train_HMM_parameters(y_train, one_hot=False)
         p_states = QR_steady_state_distribution(trans_mat)
-        # NORMALIZAR PSD
-        # como separar as features para a nossa CNN?
-        # com os envolopes separámos em patches, aqui usamos a própria dimensão da STFT?
-        # Contruir datapreparer:
-        #    - Separe o som por janelas PSD
-        #
-        # Implementar uma CNN com convoluções 2D: first approach -> mudar a nossa CNN para operações 2D.
-        # ???
-        # Profit
+
         dp = HybridPCGDataPreparer2D(patch_size=patch_size, number_channels=nch, num_states=4)
         dp.set_features_and_labels(X_train, y_train)
         train_dataset = tf.data.Dataset.from_generator(dp,
@@ -95,7 +85,7 @@ def main():
                                                            tf.TensorSpec(shape=(None, patch_size, nch, 1),
                                                                          dtype=tf.float32),
                                                            tf.TensorSpec(shape=(None, 4), dtype=tf.float32))
-                                                       ).cache().prefetch(buffer_size=tf.data.AUTOTUNE)
+                                                       )
         dev_dp = HybridPCGDataPreparer2D(patch_size=patch_size, number_channels=nch, num_states=4)
         dev_dp.set_features_and_labels(X_dev, y_dev)
         dev_dataset = tf.data.Dataset.from_generator(dev_dp,
@@ -103,7 +93,7 @@ def main():
                                                          tf.TensorSpec(shape=(None, patch_size, nch, 1),
                                                                        dtype=tf.float32),
                                                          tf.TensorSpec(shape=(None, 4), dtype=tf.float32))
-                                                     ).cache().prefetch(buffer_size=tf.data.AUTOTUNE)
+                                                     )
 
         test_dp = HybridPCGDataPreparer2D(patch_size=patch_size, number_channels=nch, num_states=4)
         test_dp.set_features_and_labels(features_test, labels_test)
@@ -112,8 +102,7 @@ def main():
                                                           tf.TensorSpec(shape=(None, patch_size, nch, 1),
                                                                         dtype=tf.float32),
                                                           tf.TensorSpec(shape=(None, 4), dtype=tf.float32))
-                                                      ).cache().prefetch(buffer_size=tf.data.AUTOTUNE)
-
+                                                      )
 
         train_dataset = train_dataset.shuffle(buffer_size=400, reshuffle_each_iteration=True)
         checkpoint_path = experiment_logger.path + '/weights_fold' + str(j_fold) + '.hdf5'
