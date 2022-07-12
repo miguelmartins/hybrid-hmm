@@ -126,15 +126,15 @@ class HybridPCGDataPreparer2D(HybridPCGDataPreparer):
     def _split_PCG_features(self, sound, label):
         n = len(label)
         sound = sound.reshape(sound.shape + (1,))
-        pad_value = int(self.patch_size / 2)
-        x_padded = np.pad(sound, ((pad_value, pad_value-1), (0, 0), (0, 0)), 'constant',
-                          constant_values=(0))
-        x_array = []
-        s_array = []
+        x_padded_temp = np.concatenate((np.zeros((int(self.patch_size / 2), self.number_channels, 1)), sound), axis=0)
+        x_padded = np.concatenate((x_padded_temp, np.zeros((int(self.patch_size / 2) - 1, self.number_channels, 1))),
+                                  axis=0)
+        x_array = np.zeros((n, self.patch_size, self.number_channels, 1))
+        s_array = np.zeros((n, 4))
         for j in range(0, n):
-            x_array.append(x_padded[j:j + self.patch_size, :])
-            s_array.append(label[j, :])
-        return np.array(x_array, dtype=object), np.array(s_array, dtype=object)
+            x_array[j, :, :] = x_padded[j:j + self.patch_size, :]
+            s_array[j, :] = label[j, :]
+        return x_array, s_array
 
 
 def get_data_from_generator(*, data_processor, batch_size, patch_size, number_channels, number_classes, trainable=True):
