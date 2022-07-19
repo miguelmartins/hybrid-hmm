@@ -22,15 +22,14 @@ def main():
     number_folders = 10
     learning_rate = 1e-3
 
-    patient_ids, features, labels = CircorExtractor.from_mat('../datasets/circor_final_labels50hz.mat')
-    features = CircorExtractor.normalize_signal(features)
+    good_indices, patient_ids, features, labels = CircorExtractor.from_mat('../datasets/circor_final_labels50hz.mat',
+                                                                           patch_size=patch_size)
+     # features = CircorExtractor.normalize_signal(features)
     features = DataExtractor.get_power_spectrum(data=features,
                                                 sampling_rate=1000,
                                                 window_length=150,
                                                 window_overlap=130,
                                                 window_type='hann')
-    # features = CircorExtractor.align_psd_labels(features, labels)
-    good_indices = CircorExtractor.filter_smaller_than_patch(patch_size, features)
 
     name = 'hmm_completlikelihood1e3_circor_psd_joint'
     experiment_logger = PCGExperimentLogger(path='../results/hybrid/circor', name=name, number_folders=number_folders)
@@ -46,8 +45,8 @@ def main():
     model.save_weights('random_init')  # Save initialization before training
 
     acc_folds, prec_folds = [], []
-    for j_fold in range(number_folders):
-        min_val_loss = 1e3
+    for j_fold in range(1, number_folders):
+        min_val_loss = 1e100
         model.load_weights('random_init')  # Load random weights f.e. fold
         train_indices, test_indices = get_train_test_indices(good_indices=good_indices,
                                                              number_folders=number_folders,
@@ -59,14 +58,15 @@ def main():
         print('Considering folder number:', j_fold + 1)
         # This ia residual code from the initial implementation, kept for "panicky" reasons
 
-        train_indices = good_indices[train_indices]
-        test_indices = good_indices[test_indices]
-
         features_train = features[train_indices]
         features_test = features[test_indices]
 
         labels_train = labels[train_indices]
         labels_test = labels[test_indices]
+
+        # This ia residual code from the initial implementation, kept for "panicky" reasons
+        train_indices = good_indices[train_indices]
+        test_indices = good_indices[test_indices]
 
         print('Number of training sounds:', len(labels_train))
         print('Number of testing sounds:', len(labels_test))
@@ -74,11 +74,8 @@ def main():
         X_train, X_dev, y_train, y_dev = train_test_split(
             features_train, labels_train, test_size=0.1, random_state=42)
 
-        _, trans_mat = train_HMM_parameters(y_train, one_hot=False)
-        p_states = QR_steady_state_distribution(trans_mat)
-        loss_object.trans_mat.assign(tf.Variable(trans_mat, trainable=True, dtype=tf.float32))
-        loss_object.p_states.assign(tf.Variable(p_states, trainable=True, dtype=tf.float32))
-
+        # _, trans_mat = train_HMM_parameters(y_train, one_hot=False)
+       #  p_states = QR_steady_state_distribution(trans_mat)
         dp = HybridPCGDataPreparer2D(patch_size=patch_size, number_channels=nch, num_states=4)
         dp.set_features_and_labels(X_train, y_train)
         train_dataset = tf.data.Dataset.from_generator(dp,
@@ -86,7 +83,7 @@ def main():
                                                            tf.TensorSpec(shape=(None, patch_size, nch, 1),
                                                                          dtype=tf.float32),
                                                            tf.TensorSpec(shape=(None, 4), dtype=tf.float32))
-                                                       )
+                                                       ).prefetch(buffer_size=tf.data.AUTOTUNE)
         dev_dp = HybridPCGDataPreparer2D(patch_size=patch_size, number_channels=nch, num_states=4)
         dev_dp.set_features_and_labels(X_dev, y_dev)
         dev_dataset = tf.data.Dataset.from_generator(dev_dp,
@@ -94,7 +91,7 @@ def main():
                                                          tf.TensorSpec(shape=(None, patch_size, nch, 1),
                                                                        dtype=tf.float32),
                                                          tf.TensorSpec(shape=(None, 4), dtype=tf.float32))
-                                                     )
+                                                     ).prefetch(buffer_size=tf.data.AUTOTUNE)
 
         test_dp = HybridPCGDataPreparer2D(patch_size=patch_size, number_channels=nch, num_states=4)
         test_dp.set_features_and_labels(features_test, labels_test)
@@ -103,17 +100,39 @@ def main():
                                                           tf.TensorSpec(shape=(None, patch_size, nch, 1),
                                                                         dtype=tf.float32),
                                                           tf.TensorSpec(shape=(None, 4), dtype=tf.float32))
-                                                      )
+                                                      ).prefetch(buffer_size=tf.data.AUTOTUNE)
+
+        # MLE Estimation for HMM
+        dataset_np = list(train_dataset.as_numpy_iterator())
+        dataset = np.array(dataset_np, dtype=object)
+        labels_ = dataset[:, 1]
+        p_states, trans_mat = train_HMM_parameters(labels_)
+        loss_object.trans_mat.assign(tf.Variable(trans_mat, trainable=True, dtype=tf.float32))
+        loss_object.p_states.assign(tf.Variable(p_states, trainable=True, dtype=tf.float32))
+
+        best_p_states = loss_object.p_states.numpy()
+        best_trans_mat = loss_object.trans_mat.numpy()
         for ep in range(num_epochs):
             print('=', end='')
-            for i, (x_train, y_train) in tqdm(enumerate(train_dataset), desc=f'training', total=len(X_train),
-                                              leave=True):
-                hmm_train_step(model=model,
-                               optimizer=optimizer_nn,
-                               loss_object=loss_object,
-                               train_batch=x_train,
-                               label_batch=y_train,
-                               metrics=None)
+            metrics = [tf.keras.metrics.CategoricalAccuracy(name='categorical_accuracy', dtype=None)]
+            for ep in range(num_epochs):
+                print('=', end='')
+                for i, (x_train, y_train) in tqdm(enumerate(train_dataset), desc=f'training', total=len(X_train),
+                                                  leave=True):
+                    hmm_train_step(model=model,
+                                   optimizer=optimizer_nn,
+                                   loss_object=loss_object,
+                                   train_batch=x_train,
+                                   label_batch=y_train,
+                                   metrics=metrics)
+
+                    print(f"ep: {ep}. Cat accuracy: {metrics[0].result().numpy()}")
+
+            # 29500        janela: 150ms    stride: 50ms (overlap=100ms)
+            #              stride = 1 / (50hz) = 20 ms /(o intervalo tem que coincidir com o periodo)
+            #              N_janelas = (|Tobs + pad| - janela) / stride + 1   -> (N_janelas , numero_freq)
+            #     sinal 10 valores -> psd com stride 2 -> (0, 2, 4, 6, 8); janela = 5 (0, 2, 4, 6
+            #     PSD deve ter output igual as anotacoes, dado que usamos o stride correcto!
             (train_loss, train_acc) = model.evaluate(train_dataset, verbose=0)
             print("Train Loss", train_loss, "Train_acc", train_acc)
             (val_loss, val_acc) = model.evaluate(dev_dataset, verbose=0)
