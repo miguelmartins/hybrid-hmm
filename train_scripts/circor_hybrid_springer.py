@@ -106,6 +106,9 @@ def main():
         loss_object.p_states.assign(tf.Variable(p_states, trainable=True, dtype=tf.float32))
 
         train_dataset = train_dataset.shuffle(len(X_train), reshuffle_each_iteration=True)
+
+        best_p_states = loss_object.p_states.numpy()
+        best_trans_mat = loss_object.trans_mat.numpy()
         for ep in range(num_epochs):
             print('=', end='')
             for i, (x_train, y_train) in tqdm(enumerate(train_dataset), desc=f'training', total=len(X_train),
