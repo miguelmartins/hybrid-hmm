@@ -201,7 +201,7 @@ class DataExtractor:
     @staticmethod
     def resample_signal(data, original_rate=1000, new_rate=50):
         resampled_data = []
-        for recording in tqdm(data, 'Normalizing recordings', total=len(data), leave=True):
+        for recording in tqdm(data, 'Filter+Resampling recordings', total=len(data), leave=True):
             sos_hp = scipy.signal.butter(N=2, Wn=25, btype='highpass', analog=False, fs=original_rate, output='sos')
             sos_lp = scipy.signal.butter(N=2, Wn=400, btype='lowpass', analog=False, fs=original_rate, output='sos')
             filtered = scipy.signal.sosfilt(sos_hp, recording)
@@ -364,3 +364,15 @@ class CircorExtractor:
     def filter_smaller_than_patch(patch_size, features):
         # remove sounds shorter than patch size (and record sound indexes)
         return np.array([j for j in range(len(features)) if len(features[j]) >= patch_size])
+
+    @staticmethod
+    def read_from_np(path, patch_size):
+        dataset = np.load(path, allow_pickle=True)
+        patient_ids = dataset[:, 0]
+        features = dataset[:, 1]
+        labels = dataset[:, 2].T
+        valid_indices = CircorExtractor.filter_smaller_than_patch(patch_size, features)
+        features = features[valid_indices]
+        labels = labels[valid_indices]
+        patient_ids = patient_ids[valid_indices]
+        return valid_indices, features, labels, patient_ids
