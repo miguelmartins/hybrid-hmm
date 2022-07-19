@@ -24,7 +24,7 @@ def main():
 
     good_indices, patient_ids, features, labels = CircorExtractor.from_mat('../datasets/circor_final_labels50hz.mat',
                                                                            patch_size=patch_size)
-     # features = CircorExtractor.normalize_signal(features)
+    features = CircorExtractor.normalize_signal(features)
     features = DataExtractor.get_power_spectrum(data=features,
                                                 sampling_rate=1000,
                                                 window_length=150,
