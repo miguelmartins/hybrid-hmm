@@ -78,14 +78,14 @@ def main():
                                                            tf.TensorSpec(shape=(None, patch_size, nch),
                                                                          dtype=tf.float32),
                                                            tf.TensorSpec(shape=(None, 4), dtype=tf.float32))
-                                                       )
+                                                       ).prefetch(buffer_size=tf.data.AUTOTUNE)
         dev_dp = HybridPCGDataPreparer(patch_size=patch_size, number_channels=nch, num_states=4)
         dev_dp.set_features_and_labels(X_dev, y_dev)
         dev_dataset = tf.data.Dataset.from_generator(dev_dp,
                                                      output_signature=(
                                                          tf.TensorSpec(shape=(None, patch_size, nch), dtype=tf.float32),
                                                          tf.TensorSpec(shape=(None, 4), dtype=tf.float32))
-                                                     )
+                                                     ).prefetch(buffer_size=tf.data.AUTOTUNE)
 
         test_dp = HybridPCGDataPreparer(patch_size=patch_size, number_channels=nch, num_states=4)
         test_dp.set_features_and_labels(features_test, labels_test)
@@ -94,7 +94,7 @@ def main():
                                                           tf.TensorSpec(shape=(None, patch_size, nch),
                                                                         dtype=tf.float32),
                                                           tf.TensorSpec(shape=(None, 4), dtype=tf.float32))
-                                                      )
+                                                      ).prefetch(buffer_size=tf.data.AUTOTUNE)
 
         # MLE Estimation for HMM
         dataset_np = list(train_dataset.as_numpy_iterator())
