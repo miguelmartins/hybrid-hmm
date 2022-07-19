@@ -338,7 +338,7 @@ class DataExtractor:
 
 class CircorExtractor:
     @staticmethod
-    def from_mat(path):
+    def from_mat(path, patch_size):
         def transpose(arr):
             return np.array([a.T for a in arr], dtype=object)
 
@@ -351,7 +351,12 @@ class CircorExtractor:
         features = transpose(circor[:, 1])
         features = DataExtractor.resample_signal(features, original_rate=4000, new_rate=1000)
         labels = np.array([a.T.squeeze() for a in circor[:, 2]], dtype=object)
-        return patient_ids, features, labels
+
+        valid_indices = CircorExtractor.filter_smaller_than_patch(patch_size, features)
+        features = features[valid_indices]
+        labels = labels[valid_indices]
+        patient_ids = patient_ids[valid_indices]
+        return valid_indices, patient_ids, features, labels
 
     @staticmethod
     def normalize_signal(features):
