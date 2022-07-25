@@ -16,7 +16,7 @@ def get_center_values(state_seq, sampling_rate=50):
     return centers
 
 
-def schmidt_metrics(ground_truth, prediction, limit_tp=0.06):
+def schmidt_metrics_(ground_truth, prediction, limit_tp=0.06):
     center_value = np.array(get_center_values(ground_truth))
     est_center_value = np.array(get_center_values(prediction))
 
@@ -76,6 +76,7 @@ def get_segments(y: np.ndarray) -> np.ndarray:
     """
     segments = []
     signal_length = y.shape[0]
+    start = 0
     for i in range(1, signal_length):
         if y[i] != y[i - 1]:
             segments.append([start, i - 1, y[i - 1]])
@@ -147,3 +148,19 @@ def get_schmidt_tp_fp(y_true: np.ndarray,
     fp = len(pred_segment_s1) + len(pred_segment_s2) - tp  # The remainder of the sounds are considered FP by default.
     total = len(true_segment_s1) + len(true_segment_s2)
     return tp, fp, total
+
+
+def schmidt_metrics(y_true: np.ndarray,
+                    y_pred: np.ndarray,
+                    sample_rate: int = 50,
+                    threshold: float = 0.06) -> Tuple[float, float]:
+    tp, fp, total = get_schmidt_tp_fp(y_true, y_pred, sample_rate, threshold)
+    try:
+        ppv = tp / (tp + fp)
+    except:
+        ppv = 0.0
+    try:
+        sensitivity = tp / total
+    except:
+        sensitivity = 0.0
+    return ppv, sensitivity
