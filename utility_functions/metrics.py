@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import numpy as np
 from sklearn.metrics import accuracy_score
 
@@ -62,8 +64,15 @@ def get_metrics(gt, prediction):
 
 def get_segments(y: np.ndarray) -> np.ndarray:
     """
-    Computes the segments of each event in a heart sound state sequence.
-    Returns a matrix of rows [start, end, sound], for each continuous segment
+    Given a 1D state sequence, determines the start and end segment number for each
+    contiguous state segment
+    Parameters
+    ----------
+    y: a 1d np.ndarray containing a state sequence
+
+    Returns
+    -------
+    A N_soundsX 2 X 3 matrix of the form A_i = [start_i, end_i, state_i]
     """
     segments = []
     signal_length = y.shape[0]
@@ -77,28 +86,63 @@ def get_segments(y: np.ndarray) -> np.ndarray:
 
 
 def get_centers(segments: np.ndarray) -> np.ndarray:
-    # Find middle point and account for 0.5 correction in indices
+    """
+    Given the segments start deliniations matrix, computes the center segment for each row.
+    Output segment center indices are assumed to be continuous for computational purposes.
+    Parameters
+    ----------
+    segments
+        A 2D np.ndarray of the form A_i=[start_i, end_i, state_i]
+    Returns
+    -------
+        A 2D  np.ndarray of the form B_j = [middle_point_j, state_j]
+    """
     centers_ = (((segments[:, 1] - segments[:, 0]) / 2) + segments[:, 0])
     return np.stack([centers_, segments[:, 2]]).T  # transpose to get a n_segments X 2 matrix
 
 
-def get_schmidt_tp_fp(y_true, y_pred, sample_rate=50, threshold=0.06):
+def get_schmidt_tp_fp(y_true: np.ndarray,
+                      y_pred: np.ndarray,
+                      sample_rate: int = 50,
+                      threshold: float = 0.06) -> Tuple[int, int]:
+    """
+    Computes TP and FP for PCG pairs (y_true, y_pred), where S1 (state == 0) and S2 (state == 2)
+    are assumed to be the positive predictions. See [Schmidt08] for details. Summary:
+    A true positive is considered if the distance to the mid point of each segment in y_true and y_pred
+    is less than a certain threshold (default 60 ms). All other instances are considered FP.
+    Parameters
+    ----------
+    y_true The ground truth sequence
+    y_pred The prediction sequence
+    sample_rate The signal sample rate
+    threshold The TP window threshold (defaults to 60 ms)
+
+    Returns
+    -------
+        (int, int) A tuple containing the #tp and #fp respectively.
+    """
+
+    # Get center segments
     true_segment_s = get_centers(get_segments(y_true))
     pred_segment_s = get_centers(get_segments(y_pred))
+    # Convert to time domain (seconds)
     true_segment_s[:, 0] = true_segment_s[:, 0] / sample_rate
     pred_segment_s[:, 0] = pred_segment_s[:, 0] / sample_rate
 
+    # Find s1 and s2 segments
     true_segment_s1 = true_segment_s[true_segment_s[:, 1] == 0]
     true_segment_s2 = true_segment_s[true_segment_s[:, 1] == 2]
     pred_segment_s1 = pred_segment_s[pred_segment_s[:, 1] == 0]
     pred_segment_s2 = pred_segment_s[pred_segment_s[:, 1] == 2]
 
     def get_tp(x, y, threshold):
+        # Check if match is within threshold. If so, mark index with true (1).
         mask_tp = np.where(np.abs(x[:, 0] - y[:, 0]) <= threshold, True, False)
         return mask_tp
 
-    mask_tp_s1 = get_tp(true_segment_s1, pred_segment_s1, threshold)
-    mask_tp_s2 = get_tp(true_segment_s2, pred_segment_s2, threshold)
-    tp = np.sum(mask_tp_s1) + np.sum(mask_tp_s2)
-    fp = len(pred_segment_s) - tp
+    # Get indices of TP (center(y_pred_t) == center(y_true_t)
+    mask_tp_s1 = get_tp(true_segment_s1, pred_segment_s1, threshold)  # For S1s
+    mask_tp_s2 = get_tp(true_segment_s2, pred_segment_s2, threshold)  # For S2s
+    tp = np.sum(mask_tp_s1) + np.sum(mask_tp_s2)  # Sum TP for all cases
+    fp = len(pred_segment_s) - tp  # The remainder of the sounds are considered FP by default.
     return tp, fp
