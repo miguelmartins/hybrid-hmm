@@ -144,6 +144,6 @@ def get_schmidt_tp_fp(y_true: np.ndarray,
     mask_tp_s1 = get_tp(true_segment_s1, pred_segment_s1, threshold)  # For S1s
     mask_tp_s2 = get_tp(true_segment_s2, pred_segment_s2, threshold)  # For S2s
     tp = np.sum(mask_tp_s1) + np.sum(mask_tp_s2)  # Sum TP for all cases
-    fp = len(pred_segment_s) - tp  # The remainder of the sounds are considered FP by default.
+    fp = len(pred_segment_s1) + len(pred_segment_s2) - tp  # The remainder of the sounds are considered FP by default.
     total = len(true_segment_s1) + len(true_segment_s2)
     return tp, fp, total
