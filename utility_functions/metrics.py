@@ -1,6 +1,7 @@
 import numpy as np
 from sklearn.metrics import accuracy_score
 
+
 # TODO: check with notebook on other repo to see if this is correct
 def get_center_values(state_seq, sampling_rate=50):
     centers = []
@@ -57,3 +58,19 @@ def get_metrics(gt, prediction):
     mean_sensitivity = np.mean(sensitivity)
     mean_accuracy = np.mean(accuracy)
     return mean_ppv, mean_sensitivity, mean_accuracy
+
+
+def get_segments(y: np.ndarray) -> np.ndarray:
+    '''
+    Computes the segments of each event in a heart sound state sequence.
+    Returns a matrix of rows [start, end, sound], for each continuous segment
+    '''
+    segments = []
+    signal_length = y.shape[0]
+    for i in range(1, signal_length):  # append all but last segment
+        if y[i] != y[i-1]:
+            segments.append([start, i, y[i-1]])
+            start = i
+
+    segments.append([start, signal_length, y[-1]])  # append last segment
+    return np.array(segments)
