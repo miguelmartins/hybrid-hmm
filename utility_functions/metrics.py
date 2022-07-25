@@ -119,7 +119,7 @@ def get_schmidt_tp_fp(y_true: np.ndarray,
 
     Returns
     -------
-        (int, int) A tuple containing the #tp and #fp respectively.
+        (int, int, int) A tuple containing the #tp and #fp and total (# of s1 and s2 in ground truth) respectively.
     """
 
     # Get center segments
@@ -145,4 +145,5 @@ def get_schmidt_tp_fp(y_true: np.ndarray,
     mask_tp_s2 = get_tp(true_segment_s2, pred_segment_s2, threshold)  # For S2s
     tp = np.sum(mask_tp_s1) + np.sum(mask_tp_s2)  # Sum TP for all cases
     fp = len(pred_segment_s) - tp  # The remainder of the sounds are considered FP by default.
-    return tp, fp
+    total = len(true_segment_s1) + len(true_segment_s2)
+    return tp, fp, total
