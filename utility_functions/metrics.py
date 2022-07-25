@@ -61,16 +61,16 @@ def get_metrics(gt, prediction):
 
 
 def get_segments(y: np.ndarray) -> np.ndarray:
-    '''
+    """
     Computes the segments of each event in a heart sound state sequence.
     Returns a matrix of rows [start, end, sound], for each continuous segment
-    '''
+    """
     segments = []
     signal_length = y.shape[0]
-    for i in range(1, signal_length):  # append all but last segment
-        if y[i] != y[i-1]:
-            segments.append([start, i, y[i-1]])
+    for i in range(1, signal_length):
+        if y[i] != y[i - 1]:
+            segments.append([start, i - 1, y[i - 1]])
             start = i
 
-    segments.append([start, signal_length, y[-1]])  # append last segment
+    segments.append([start, signal_length - 1, y[-1]])
     return np.array(segments)
