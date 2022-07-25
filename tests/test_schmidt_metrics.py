@@ -133,3 +133,12 @@ class TestSchmidtMetrics(unittest.TestCase):
         exp_tp, exp_fp, exp_total = 0, 2, 2
         tp, fp, total = get_schmidt_tp_fp(y_true, y_pred)
         assert (exp_tp == tp) and (exp_fp == fp) and (exp_total == total)
+
+        # 1 TP 1 FP and 1 Total. Discard non S1/S2 values. Different #S1 and #S2 in ground truth and prediction
+        y_true = np.array([0] * 100 +
+                           [2] * 100)
+        y_pred = np.array([1] * 100 +
+                          [2] * 100)
+        exp_tp, exp_fp, exp_total = 1, 0, 2  # 0 FP since the mismatch prediction is not S1 or S2.
+        tp, fp, total = get_schmidt_tp_fp(y_true, y_pred)
+        assert (exp_tp == tp) and (exp_fp == fp) and (exp_total == total)
