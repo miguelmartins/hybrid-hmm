@@ -74,3 +74,31 @@ def get_segments(y: np.ndarray) -> np.ndarray:
 
     segments.append([start, signal_length - 1, y[-1]])
     return np.array(segments)
+
+
+def get_centers(segments: np.ndarray) -> np.ndarray:
+    # Find middle point and account for 0.5 correction in indices
+    centers_ = (((segments[:, 1] - segments[:, 0]) / 2) + segments[:, 0])
+    return np.stack([centers_, segments[:, 2]]).T  # transpose to get a n_segments X 2 matrix
+
+
+def get_schmidt_tp_fp(y_true, y_pred, sample_rate=50, threshold=0.06):
+    true_segment_s = get_centers(get_segments(y_true))
+    pred_segment_s = get_centers(get_segments(y_pred))
+    true_segment_s[:, 0] = true_segment_s[:, 0] / sample_rate
+    pred_segment_s[:, 0] = pred_segment_s[:, 0] / sample_rate
+
+    true_segment_s1 = true_segment_s[true_segment_s[:, 1] == 0]
+    true_segment_s2 = true_segment_s[true_segment_s[:, 1] == 2]
+    pred_segment_s1 = pred_segment_s[pred_segment_s[:, 1] == 0]
+    pred_segment_s2 = pred_segment_s[pred_segment_s[:, 1] == 2]
+
+    def get_tp(x, y, threshold):
+        mask_tp = np.where(np.abs(x[:, 0] - y[:, 0]) <= threshold, True, False)
+        return mask_tp
+
+    mask_tp_s1 = get_tp(true_segment_s1, pred_segment_s1, threshold)
+    mask_tp_s2 = get_tp(true_segment_s2, pred_segment_s2, threshold)
+    tp = np.sum(mask_tp_s1) + np.sum(mask_tp_s2)
+    fp = len(pred_segment_s) - tp
+    return tp, fp
