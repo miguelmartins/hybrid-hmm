@@ -148,7 +148,22 @@ class TestSchmidtMetrics(unittest.TestCase):
                           [2] * 100 +
                           [0] * 300)
         y_pred = np.array([1] * 100 +
-                          [2] * 100)
+                          [2] * 100 +
+                          [3] * 300)
         exp_tp, exp_fp, exp_total = 1, 0, 3  # 0 FP since the mismatch prediction is not S1 or S2.
         tp, fp, total = get_schmidt_tp_fp(y_true, y_pred)
         assert (exp_tp == tp) and (exp_fp == fp) and (exp_total == total)
+
+        y_true = np.array([0] * 100 +
+                          [2] * 100)
+        y_pred = np.array([0] * 20 +  #  TODO: here each 0 in y_pred should be accounted as TP once when in window. If it is close to more than one, we go by traversal
+                          [1] * 20 +
+                          [0] * 20 +
+                          [1] * 20 +
+                          [0] * 20 +
+                          [1] * 50 +
+                          [0] * 25 +
+                          [0] * 25)
+        print(y_true.shape, y_pred.shape)
+        tp, fp, total = get_schmidt_tp_fp(y_true, y_pred)
+        print(tp, fp, total)
