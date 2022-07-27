@@ -4,50 +4,6 @@ import numpy as np
 from sklearn.metrics import accuracy_score
 
 
-# TODO: check with notebook on other repo to see if this is correct
-def get_center_values(state_seq, sampling_rate=50):
-    centers = []
-    prev_start = 0  # start of the initial state
-    for i in range(1, len(state_seq)):
-        if state_seq[i] != state_seq[i - 1]:
-            center = prev_start + i  # aggregation for average between the end of last and start of new
-            centers.append([(center / sampling_rate) / 2, state_seq[i - 1]])  # save mean and previous state
-            prev_start = i  # the new becomes the previous
-    return centers
-
-
-def schmidt_metrics_(ground_truth, prediction, limit_tp=0.06):
-    center_value = np.array(get_center_values(ground_truth))
-    est_center_value = np.array(get_center_values(prediction))
-
-    tp, fp = 0, 0
-    for k in range(len(est_center_value)):
-        out_center = est_center_value[k, 0]
-        out_state = est_center_value[k, 1]
-        distance = np.abs(out_center - center_value[:, 0])
-        candidates = np.where(distance <= limit_tp)
-        sum_condition_1 = np.sum(center_value[candidates, 1] == 1)
-        sum_condition_2 = np.sum(center_value[candidates, 1] == 3)
-        if out_state == 1 and sum_condition_1 > 0:
-            tp += 1
-        if out_state == 1 and sum_condition_1 == 0:
-            fp += 1
-        if out_state == 3 and sum_condition_2 > 0:
-            tp += 1
-        if out_state == 3 and sum_condition_2 == 0:
-            fp += 1
-
-    try:
-        ppv = tp / (tp + fp)
-    except:
-        ppv = 0.0
-    try:
-        sensitivity = tp / (len(np.where(center_value[:, 1] == 1)[0]) + len(np.where(center_value[:, 1] == 3)[0]))
-    except:
-        sensitivity = 0.0
-    return ppv, sensitivity
-
-
 def get_metrics(gt, prediction):
     ppv, sensitivity, accuracy = [], [], []
 
@@ -102,6 +58,39 @@ def get_centers(segments: np.ndarray) -> np.ndarray:
     return np.stack([centers_, segments[:, 2]]).T  # transpose to get a n_segments X 2 matrix
 
 
+def compute_tp_fp(true_segment_s: np.ndarray, pred_segment_s: np.ndarray, threshold: float) -> Tuple[int, int]:
+    """
+    Given the estimates and ground truth for the segments center outputs the number of TP and FP given some
+    threshold in time (s)
+    according to [Schmidt08]
+    Parameters
+    ----------
+    true_segment_s A 1D array of the form a_i = [center_i state_i]
+    pred_segment_s A 1D array of the form a_i = [center_i state_i]
+    threshold Time interval to account for TPs (s)
+
+    Returns
+    -------
+        The number of TP and FP according to [Schmidt08]
+    """
+    # Filter only positive predictions (S1 [0] and S2 [2])
+    true_segment_fundamental = true_segment_s[(true_segment_s[:, 1] == 0) | (true_segment_s[:, 1] == 2)]
+    pred_segment_fundamental = pred_segment_s[(pred_segment_s[:, 1] == 0) | (pred_segment_s[:, 1] == 2)]
+    tp = 0
+    for prediction in pred_segment_fundamental:
+        pred_center, pred_state = prediction[0], prediction[1]
+        # see where pred and ground and ground truth concur
+        join = true_segment_fundamental[true_segment_fundamental[:, 1] == pred_state]
+        # select points that are withing threshold
+        candidates = np.where(np.abs(join[:, 0] - pred_center) <= threshold)[0]
+        # If the condition is fulfilled at least once, count as tp
+        if len(candidates) > 0:
+            tp += 1
+    # FP all other sounds that are not TP.
+    fp = len(pred_segment_fundamental) - tp
+    return tp, fp
+
+
 def get_schmidt_tp_fp(y_true: np.ndarray,
                       y_pred: np.ndarray,
                       sample_rate: int = 50,
@@ -129,24 +118,12 @@ def get_schmidt_tp_fp(y_true: np.ndarray,
     # Convert to time domain (seconds)
     true_segment_s[:, 0] = true_segment_s[:, 0] / sample_rate
     pred_segment_s[:, 0] = pred_segment_s[:, 0] / sample_rate
-
+    # Determine tp and fp within tolerance threshold
+    tp, fp = compute_tp_fp(true_segment_s, pred_segment_s, threshold)
     # Find s1 and s2 segments
     true_segment_s1 = true_segment_s[true_segment_s[:, 1] == 0]
     true_segment_s2 = true_segment_s[true_segment_s[:, 1] == 2]
-    pred_segment_s1 = pred_segment_s[pred_segment_s[:, 1] == 0]
-    pred_segment_s2 = pred_segment_s[pred_segment_s[:, 1] == 2]
-
-    def get_tp(x, y, threshold):
-        # Check if match is within threshold. If so, mark index with true (1).
-        mask_tp = np.where(np.abs(x[:, 0] - y[:, 0]) <= threshold, True, False)
-        return mask_tp
-
-    # Get indices of TP (center(y_pred_t) == center(y_true_t)
-    mask_tp_s1 = get_tp(true_segment_s1, pred_segment_s1, threshold)  # For S1s
-    mask_tp_s2 = get_tp(true_segment_s2, pred_segment_s2, threshold)  # For S2s
-    tp = np.sum(mask_tp_s1) + np.sum(mask_tp_s2)  # Sum TP for all cases
-    fp = len(pred_segment_s1) + len(pred_segment_s2) - tp  # The remainder of the sounds are considered FP by default.
-    total = len(true_segment_s1) + len(true_segment_s2)
+    total = len(true_segment_s1) + len(true_segment_s2)  # Number of S1 and S2 in Ground truth (as per [Renna17])
     return tp, fp, total
 
 
