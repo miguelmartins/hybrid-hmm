@@ -164,6 +164,6 @@ class TestSchmidtMetrics(unittest.TestCase):
                           [1] * 50 +
                           [0] * 25 +
                           [0] * 25)
-        print(y_true.shape, y_pred.shape)
+        exp_tp, exp_fp, exp_total = 1, 3, 2
         tp, fp, total = get_schmidt_tp_fp(y_true, y_pred)
-        print(tp, fp, total)
+        assert (exp_tp == tp) and (exp_fp == fp) and (exp_total == total)
