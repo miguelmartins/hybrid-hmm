@@ -58,6 +58,32 @@ def get_centers(segments: np.ndarray) -> np.ndarray:
     return np.stack([centers_, segments[:, 2]]).T  # transpose to get a n_segments X 2 matrix
 
 
+def count_true_positives(source_sequence: np.ndarray, target_sequence: np.ndarray, threshold: float) -> int:
+    """
+    Given the two segments compute TP/FP according to [Schmidt08]
+    Parameters
+    ----------
+    target_sequence The reference sequence
+    source_sequence The sequence where the TP will be counted
+    threshold
+
+    Returns
+    -------
+        The number of TP of source sequence w.r.t. target_sequence
+    """
+    true_positives = 0
+    for positive in source_sequence:
+        positive_center, positive_state = positive[0], positive[1]
+        # see where pred and ground and ground truth concur
+        join = target_sequence[target_sequence[:, 1] == positive_state]
+        # select points that are withing threshold
+        candidates = np.where(np.abs(join[:, 0] - positive_center) <= threshold)[0]
+        # If the condition is fulfilled at least once, count as tp
+        if len(candidates) > 0:
+            true_positives += 1
+    return true_positives
+
+
 def compute_tp_fp(true_segment_s: np.ndarray, pred_segment_s: np.ndarray, threshold: float) -> Tuple[int, int]:
     """
     Given the estimates and ground truth for the segments center outputs the number of TP and FP given some
@@ -76,19 +102,11 @@ def compute_tp_fp(true_segment_s: np.ndarray, pred_segment_s: np.ndarray, thresh
     # Filter only positive predictions (S1 [0] and S2 [2])
     true_segment_fundamental = true_segment_s[(true_segment_s[:, 1] == 0) | (true_segment_s[:, 1] == 2)]
     pred_segment_fundamental = pred_segment_s[(pred_segment_s[:, 1] == 0) | (pred_segment_s[:, 1] == 2)]
-    tp = 0
-    for prediction in pred_segment_fundamental:
-        pred_center, pred_state = prediction[0], prediction[1]
-        # see where pred and ground and ground truth concur
-        join = true_segment_fundamental[true_segment_fundamental[:, 1] == pred_state]
-        # select points that are withing threshold
-        candidates = np.where(np.abs(join[:, 0] - pred_center) <= threshold)[0]
-        # If the condition is fulfilled at least once, count as tp
-        if len(candidates) > 0:
-            tp += 1
+    tp_ppv = count_true_positives(pred_segment_fundamental, true_segment_fundamental, threshold)
+    tp_sensitivity = count_true_positives(true_segment_fundamental, pred_segment_fundamental,  threshold)
     # FP all other sounds that are not TP.
-    fp = len(pred_segment_fundamental) - tp
-    return tp, fp
+    fp_ppv = len(pred_segment_fundamental) - tp_ppv
+    return tp_ppv, fp_ppv, tp_sensitivity
 
 
 def get_schmidt_tp_fp(y_true: np.ndarray,
@@ -119,25 +137,26 @@ def get_schmidt_tp_fp(y_true: np.ndarray,
     true_segment_s[:, 0] = true_segment_s[:, 0] / sample_rate
     pred_segment_s[:, 0] = pred_segment_s[:, 0] / sample_rate
     # Determine tp and fp within tolerance threshold
-    tp, fp = compute_tp_fp(true_segment_s, pred_segment_s, threshold)
+    tp_ppv, fp_ppv, tp_sens = compute_tp_fp(true_segment_s, pred_segment_s, threshold)
     # Find s1 and s2 segments
     true_segment_s1 = true_segment_s[true_segment_s[:, 1] == 0]
     true_segment_s2 = true_segment_s[true_segment_s[:, 1] == 2]
     total = len(true_segment_s1) + len(true_segment_s2)  # Number of S1 and S2 in Ground truth (as per [Renna17])
-    return tp, fp, total
+    return tp_ppv, fp_ppv, total, tp_sens
 
 
 def schmidt_metrics(y_true: np.ndarray,
                     y_pred: np.ndarray,
                     sample_rate: int = 50,
                     threshold: float = 0.06) -> Tuple[float, float]:
-    tp, fp, total = get_schmidt_tp_fp(y_true, y_pred, sample_rate, threshold)
+    tp, fp, total, tp_sens = get_schmidt_tp_fp(y_true, y_pred, sample_rate, threshold)
+
     try:
         ppv = tp / (tp + fp)
     except:
         ppv = 0.0
     try:
-        sensitivity = tp / total
+        sensitivity = tp_sens / total
     except:
         sensitivity = 0.0
     return ppv, sensitivity
