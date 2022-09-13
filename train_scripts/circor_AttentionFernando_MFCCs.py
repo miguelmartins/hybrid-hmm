@@ -1,3 +1,4 @@
+
 import numpy as np
 import tensorflow as tf
 import scipy.io as sio
@@ -16,7 +17,7 @@ from utility_functions.hmm_utilities import log_viterbi_no_marginal, QR_steady_s
 from tqdm import tqdm
 
 
-def scheduler(epoch, lr): return lr * 10 if epoch == 10 else lr
+def scheduler(epoch, lr): return lr * 0.1 if epoch == 10 else lr
 
 
 def main():
@@ -25,10 +26,11 @@ def main():
     nch = n_mfcc * 3
     num_epochs = 50
     number_folders = 10
-    learning_rate = 0.002
+    learning_rate = 0.0002
     batch_size = 32
 
-    patient_ids, features, labels = CircorExtractor.from_mat('../datasets/circor_final_labels50hz.mat')
+    _, patient_ids, features, labels = CircorExtractor.from_mat('datasets/circor_final_labels50hz.mat'
+                                                             , patch_size=patch_size)
     features = CircorExtractor.normalize_signal(features)
     features = DataExtractor.get_mfccs(data=features,
                                        sampling_rate=1000,
@@ -38,7 +40,7 @@ def main():
     # features = CircorExtractor.align_psd_labels(features, labels)
     good_indices = CircorExtractor.filter_smaller_than_patch(patch_size, features)
     name = 'fernando_CE_physio16_mfcc_joint'
-    experiment_logger = PCGExperimentLogger(path='../results/fernando/circor', name=name, number_folders=number_folders)
+    experiment_logger = PCGExperimentLogger(path='results/fernando/circor', name=name, number_folders=number_folders)
     print('Total number of valid sounds with length > ' + str(patch_size / 50) + ' seconds: ' + str(len(good_indices)))
     # 1) save files on a given directory, maybe experiment-name/date/results
     # 2) save model weights (including random init, maybe  experiment-name/date/checkpoints

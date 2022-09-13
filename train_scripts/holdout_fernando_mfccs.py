@@ -16,7 +16,7 @@ from utility_functions.hmm_utilities import log_viterbi_no_marginal, QR_steady_s
 from tqdm import tqdm
 
 
-def scheduler(epoch, lr): return lr * 10 if epoch == 10 else lr
+def scheduler(epoch, lr): return lr * 0.1 if epoch == 10 else lr
 
 
 def main():

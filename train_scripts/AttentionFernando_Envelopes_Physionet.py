@@ -1,3 +1,6 @@
+import os
+
+print(os.getcwd())
 import numpy as np
 import tensorflow as tf
 
@@ -16,7 +19,7 @@ from utility_functions.experiment_logs import PCGExperimentLogger
 from utility_functions.hmm_utilities import log_viterbi_no_marginal, QR_steady_state_distribution
 
 
-def scheduler(epoch, lr): return lr * 10 if epoch == 10 else lr
+def scheduler(epoch, lr): return lr * 0.1 if epoch == 10 else lr
 
 
 def main():
@@ -80,7 +83,7 @@ def main():
                                                            tf.TensorSpec(shape=(None, patch_size, nch),
                                                                          dtype=tf.float32),
                                                            tf.TensorSpec(shape=(None, 4), dtype=tf.float32))
-                                                       )
+                                                       ).cache().prefetch(tf.data.AUTOTUNE)
         dev_dp = HybridPCGDataPreparer(patch_size=patch_size, number_channels=nch, num_states=4)
         dev_dp.set_features_and_labels(X_dev, y_dev)
         dev_dataset = tf.data.Dataset.from_generator(dev_dp,
@@ -168,4 +171,6 @@ def main():
 
 
 if __name__ == '__main__':
+    print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
+    exit()
     main()
