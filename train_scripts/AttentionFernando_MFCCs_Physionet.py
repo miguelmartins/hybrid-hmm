@@ -25,7 +25,7 @@ def main():
     nch = n_mfcc * 3
     num_epochs = 50
     number_folders = 10
-    learning_rate = 0.002
+    learning_rate = initial_learning_rate = 0.002
     batch_size = 32
 
     good_indices, _, labels, patient_ids, length_sounds = DataExtractor.extract(path='../datasets/PCG'
@@ -46,14 +46,14 @@ def main():
     # 1) save files on a given directory, maybe experiment-name/date/results
     # 2) save model weights (including random init, maybe  experiment-name/date/checkpoints
     model = bilstm_attention_fernando19_softmax(nch, patch_size)
-    optimizer_nn = tf.keras.optimizers.Adam(learning_rate=learning_rate)
 
-    model.compile(optimizer=optimizer_nn, loss='categorical_crossentropy', metrics=['categorical_accuracy'])
     model.save_weights('random_init_lstm_attention')  # Save initialization before training
 
     acc_folds, prec_folds = [], []
     for j_fold in range(number_folders):
         min_val_loss = 1e3
+        optimizer_nn = tf.keras.optimizers.Adam(learning_rate=initial_learning_rate)
+        model.compile(optimizer=optimizer_nn, loss='categorical_crossentropy', metrics=['categorical_accuracy'])
         model.load_weights('random_init_lstm_attention')  # Load random weights f.e. fold
         train_indices, test_indices = get_train_test_indices(good_indices=good_indices,
                                                              number_folders=number_folders,
