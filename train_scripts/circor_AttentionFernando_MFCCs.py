@@ -63,14 +63,14 @@ def main():
 
         print('Considering folder number:', j_fold + 1)
         # This ia residual code from the initial implementation, kept for "panicky" reasons
-        train_indices = good_indices[train_indices]
-        test_indices = good_indices[test_indices]
-
         features_train = features[train_indices]
         features_test = features[test_indices]
 
         labels_train = labels[train_indices]
         labels_test = labels[test_indices]
+
+        train_indices = good_indices[train_indices]
+        test_indices = good_indices[test_indices]
 
         print('Number of training sounds:', len(labels_train))
         print('Number of testing sounds:', len(labels_test))
@@ -122,7 +122,7 @@ def main():
         labels_list, predictions_list = [], []
 
         # Viterbi algorithm in test set
-        for x, y in tqdm(test_dataset, desc=f'validating (viterbi)', total=len(labels_test), leave=True):
+        for x, y in tqdm(test_dataset, desc=f'validating (viterbi)', total=len(labels_test)):
             logits = model.predict(x)
             y = y.numpy()
             _, _, predictions = log_viterbi_no_marginal(p_states, trans_mat,
@@ -146,8 +146,13 @@ def main():
         output_probs, output_seqs = prepare_validation_data(out_test, test_indices, length_sounds_test)
 
         sample_acc = np.zeros((len(labels_test),))
+        print('***')
+        print(output_seqs)
+        print('********************')
+        print(labels_test)
+        print(np.sum((output_seqs[j] != labels_test[j] - 1)))
         for j in range(len(labels_test)):
-            sample_acc[j] = 1 - (np.sum((output_seqs[j] != labels_test[j] - 1).astype(int)) / len(labels_test[j]))
+            sample_acc[j] = 1 - (np.sum((output_seqs[j] != labels_test[j] - 1)) / len(labels_test[j]))
 
         print('Test mean sample accuracy for this folder:', np.sum(sample_acc) / len(sample_acc))
         for j in range(len(labels_test)):
