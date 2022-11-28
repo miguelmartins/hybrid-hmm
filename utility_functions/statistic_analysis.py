@@ -14,8 +14,14 @@ def paired_t_test_statistics(samples: Dict[str, List], alpha=0.05):
     matrix = [1 if (p_v := pair.pvalue) <= alpha else 0 for pair in paired_t_test]
     return name_pairs, paired_t_test, np.array(matrix).reshape((n, n))
 
-def plot_t_test_matrix(mat):
+
+def plot_t_test_matrix(mat, ticks):
     mat_ = mat.copy().astype(np.float32)
     for i in range(mat.shape[0]):
         mat_[i, i] = 0.5
-    plt.imshow(mat_, cmap='gray', vmin=0, vmax=1)
+    fig, ax = plt.subplots()
+    ax.imshow(mat_, cmap='gray', vmin=0, vmax=1)
+    ax.set_xticks(range(len(ticks)))
+    ax.set_xticklabels(ticks, rotation='vertical')
+    ax.set_yticks(range(len(ticks)))
+    ax.set_yticklabels(ticks, rotation='horizontal')
