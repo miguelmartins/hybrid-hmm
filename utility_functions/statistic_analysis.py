@@ -3,7 +3,7 @@ import scipy.stats as stats
 import itertools
 import numpy as np
 import matplotlib.pyplot as plt
-
+import pandas as pd
 
 def paired_t_test_statistics(samples: Dict[str, List], alpha=0.05):
     # all possible pairings
@@ -25,3 +25,19 @@ def plot_t_test_matrix(mat, ticks):
     ax.set_xticklabels(ticks, rotation='vertical')
     ax.set_yticks(range(len(ticks)))
     ax.set_yticklabels(ticks, rotation='horizontal')
+
+
+def get_boxplot_stats(datum):
+    if type(datum) is not np.ndarray:
+        raise TypeError('Input must be a numpy array.')
+    box_stats = {}
+    stats = pd.DataFrame(datum).describe()
+    box_stats['Q1'] = stats.loc['25%'].values[0]
+    box_stats['median'] = np.median(datum)
+    box_stats['Q3'] = stats.loc['75%'].values[0]
+    box_stats['IQR'] = box_stats['Q3'] - box_stats['Q1']
+    box_stats['lower_bound'] = box_stats['Q1'] - 1.5 * box_stats['IQR']
+    box_stats['upper_bound'] = box_stats['Q3'] - 1.5 * box_stats['IQR']
+    box_stats['lower_whisker'] = np.min(datum[datum >= box_stats['lower_bound']])
+    box_stats['upper_whisker'] = np.max(datum[datum <= box_stats['upper_bound']])
+    return box_stats
