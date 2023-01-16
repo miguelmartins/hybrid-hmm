@@ -37,7 +37,7 @@ def get_boxplot_stats(datum):
     box_stats['Q3'] = pd_stats.loc['75%'].values[0]
     box_stats['IQR'] = box_stats['Q3'] - box_stats['Q1']
     box_stats['lower_bound'] = box_stats['Q1'] - 1.5 * box_stats['IQR']
-    box_stats['upper_bound'] = box_stats['Q3'] - 1.5 * box_stats['IQR']
+    box_stats['upper_bound'] = box_stats['Q3'] + 1.5 * box_stats['IQR']
     box_stats['lower_whisker'] = np.min(datum[datum >= box_stats['lower_bound']])
     box_stats['upper_whisker'] = np.max(datum[datum <= box_stats['upper_bound']])
     return box_stats
