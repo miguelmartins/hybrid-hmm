@@ -31,10 +31,10 @@ def get_boxplot_stats(datum):
     if type(datum) is not np.ndarray:
         raise TypeError('Input must be a numpy array.')
     box_stats = {}
-    stats = pd.DataFrame(datum).describe()
-    box_stats['Q1'] = stats.loc['25%'].values[0]
+    pd_stats = pd.DataFrame(datum).describe()
+    box_stats['Q1'] = pd_stats.loc['25%'].values[0]
     box_stats['median'] = np.median(datum)
-    box_stats['Q3'] = stats.loc['75%'].values[0]
+    box_stats['Q3'] = pd_stats.loc['75%'].values[0]
     box_stats['IQR'] = box_stats['Q3'] - box_stats['Q1']
     box_stats['lower_bound'] = box_stats['Q1'] - 1.5 * box_stats['IQR']
     box_stats['upper_bound'] = box_stats['Q3'] - 1.5 * box_stats['IQR']
