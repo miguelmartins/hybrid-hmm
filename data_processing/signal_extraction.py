@@ -328,6 +328,7 @@ class DataExtractor:
         features = raw_features[valid_indices]
         labels = raw_labels[valid_indices]
         patient_ids = raw_patient_ids[valid_indices]
+        length_sounds = length_sounds[valid_indices]
 
         return valid_indices, features, labels, patient_ids, length_sounds
 
