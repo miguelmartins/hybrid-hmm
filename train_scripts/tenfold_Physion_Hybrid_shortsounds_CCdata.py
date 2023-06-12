@@ -19,18 +19,18 @@ def main():
     nch = 4
     num_epochs = 50
     number_folders = 10
-    learning_rate = 1e-4
+    learning_rate = 1e-3
 
     good_indices, features, labels, patient_ids, length_sounds = DataExtractor.extract(path='../datasets/PCG'
                                                                                             '/PhysioNet_SpringerFeatures_Annotated_featureFs_50_Hz_audio_ForPython.mat',
                                                                                        patch_size=patch_size)
-    name = "hmm_mmi_physio16_envelops_joint"
-    experiment_logger = PCGExperimentLogger(path='../results/hybrid', name=name, number_folders=number_folders)
+    name = "hmm_hybrid_cl_env_physio16"
+    experiment_logger = PCGExperimentLogger(path='../results/rerun/hybrid', name=name, number_folders=number_folders)
     print('Total number of valid sounds with length > ' + str(patch_size / 50) + ' seconds: ' + str(len(good_indices)))
     # 1) save files on a given directory, maybe experiment-name/date/results
     # 2) save model weights (including random init, maybe  experiment-name/date/checkpoints
     model = simple_convnet(nch, patch_size)
-    loss_object = MMILoss(tf.Variable(tf.zeros((4, 4)), trainable=True, dtype=tf.float32),
+    loss_object = CompleteLikelihoodLoss(tf.Variable(tf.zeros((4, 4)), trainable=True, dtype=tf.float32),
                           tf.Variable(tf.zeros((4,)), trainable=True, dtype=tf.float32))
     optimizer_nn = tf.keras.optimizers.Adam(learning_rate=learning_rate)
 
@@ -103,6 +103,7 @@ def main():
         train_dataset = train_dataset.shuffle(len(X_train), reshuffle_each_iteration=True)
         for ep in range(num_epochs):
             print('=', end='')
+            print(loss_object.trans_mat)
             for i, (x_train, y_train) in tqdm(enumerate(train_dataset), desc=f'training', total=len(X_train), leave=True):
                 hmm_train_step(model=model,
                                optimizer=optimizer_nn,
@@ -184,4 +185,5 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    with tf.device('/cpu:0'):
+        main()

@@ -1,4 +1,3 @@
-
 import numpy as np
 import tensorflow as tf
 import scipy.io as sio
@@ -17,7 +16,14 @@ from utility_functions.hmm_utilities import log_viterbi_no_marginal, QR_steady_s
 from tqdm import tqdm
 import os
 
+
 def scheduler(epoch, lr): return lr * 0.1 if epoch == 10 else lr
+
+
+BASE_PATH = '../results/rerun/fernando/ph_holdout/fernando_CE_physio16_mfcc_joint/2022-09-29_10:05:35'
+MODEL_CKPT = os.path.join(BASE_PATH, 'weights_fold.hdf5')
+TRANS_CKPT = os.path.join(BASE_PATH, 'trans_mat_fold_0.npy')
+PSTAT_CKPT = os.path.join(BASE_PATH, 'p_states_fold_0.npy')
 
 
 def main():
@@ -29,7 +35,7 @@ def main():
     learning_rate = initial_learning_rate = 0.002
     batch_size = 32
     _, patient_ids, features, labels = CircorExtractor.from_mat('../datasets/circor_final_labels50hz.mat'
-                                                             , patch_size=patch_size)
+                                                                , patch_size=patch_size)
     features = CircorExtractor.normalize_signal(features)
     features = DataExtractor.get_mfccs(data=features,
                                        sampling_rate=1000,
@@ -38,20 +44,20 @@ def main():
                                        n_mfcc=6)
     # features = CircorExtractor.align_psd_labels(features, labels)
     good_indices = CircorExtractor.filter_smaller_than_patch(patch_size, features)
-    name = 'fernando_CE_physio16_mfcc_joint'
+    name = 'fernando_ph16_circor'
     experiment_logger = PCGExperimentLogger(path='../results/fernando/circor', name=name, number_folders=number_folders)
     print('Total number of valid sounds with length > ' + str(patch_size / 50) + ' seconds: ' + str(len(good_indices)))
     # 1) save files on a given directory, maybe experiment-name/date/results
     # 2) save model weights (including random init, maybe  experiment-name/date/checkpoints
     model = bilstm_attention_fernando19_softmax(nch, patch_size)
-    model.save_weights('random_init_lstm_attention')  # Save initialization before training
-
+    model.load_weights(MODEL_CKPT)
+    optimizer_nn = tf.keras.optimizers.Adam(learning_rate=initial_learning_rate)
+    model.compile(optimizer=optimizer_nn, loss='categorical_crossentropy', metrics=['categorical_accuracy'])
+    trans_mat = np.load(TRANS_CKPT)
+    p_states = np.load(PSTAT_CKPT)
     acc_folds, prec_folds = [], []
     for j_fold in range(number_folders):
         min_val_loss = 1e3
-        optimizer_nn = tf.keras.optimizers.Adam(learning_rate=initial_learning_rate)
-        model.compile(optimizer=optimizer_nn, loss='categorical_crossentropy', metrics=['categorical_accuracy'])
-        model.load_weights('random_init_lstm_attention')  # Load random weights f.e. fold
         train_indices, test_indices = get_train_test_indices(good_indices=good_indices,
                                                              number_folders=number_folders,
                                                              patient_ids=patient_ids,
@@ -75,25 +81,8 @@ def main():
 
         X_train, X_dev, y_train, y_dev = train_test_split(
             features_train, labels_train, test_size=0.1, random_state=42)
-        _, trans_mat = train_HMM_parameters(y_train, one_hot=False)
-        p_states = QR_steady_state_distribution(trans_mat)
 
-        dp = HybridPCGDataPreparer2D(patch_size=patch_size, number_channels=nch, num_states=4)
-        dp.set_features_and_labels(X_train, y_train)
-        train_dataset = tf.data.Dataset.from_generator(dp,
-                                                       output_signature=(
-                                                           tf.TensorSpec(shape=(None, patch_size, nch, 1),
-                                                                         dtype=tf.float32),
-                                                           tf.TensorSpec(shape=(None, 4), dtype=tf.float32))
-                                                       )
-        dev_dp = HybridPCGDataPreparer2D(patch_size=patch_size, number_channels=nch, num_states=4)
-        dev_dp.set_features_and_labels(X_dev, y_dev)
-        dev_dataset = tf.data.Dataset.from_generator(dev_dp,
-                                                     output_signature=(
-                                                         tf.TensorSpec(shape=(None, patch_size, nch, 1),
-                                                                       dtype=tf.float32),
-                                                         tf.TensorSpec(shape=(None, 4), dtype=tf.float32))
-                                                     )
+
 
         test_dp = HybridPCGDataPreparer2D(patch_size=patch_size, number_channels=nch, num_states=4)
         test_dp.set_features_and_labels(features_test, labels_test)
@@ -103,17 +92,6 @@ def main():
                                                                         dtype=tf.float32),
                                                           tf.TensorSpec(shape=(None, 4), dtype=tf.float32))
                                                       )
-
-        train_dataset = train_dataset.shuffle(buffer_size=400, reshuffle_each_iteration=True)
-        checkpoint_path = experiment_logger.path + '/weights_fold' + str(j_fold) + '.hdf5'
-        model_checkpoint = ModelCheckpoint(filepath=checkpoint_path, monitor='val_loss', save_best_only=True)
-        schedule = tf.keras.callbacks.LearningRateScheduler(scheduler, verbose=0)
-        history = model.fit(train_dataset, validation_data=dev_dataset,
-                            validation_steps=1, batch_size=batch_size,
-                            epochs=num_epochs, verbose=1,
-                            shuffle=True, callbacks=[model_checkpoint, schedule])
-        experiment_logger.save_markov_state(j_fold, p_states, trans_mat)
-        model.load_weights(checkpoint_path)
         out_test = model.predict(test_dataset)
         accuracy, precision = [], []
 

@@ -18,6 +18,7 @@ from utility_functions.hmm_utilities import log_viterbi_no_marginal, QR_steady_s
 
 
 def main():
+
     patch_size = 64
     nch = 4
     num_epochs = 50

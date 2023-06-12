@@ -36,7 +36,7 @@ def main():
                                                                                        patch_size=patch_size)
     print('Total number of valid sounds with length > ' + str(patch_size / 50) + ' seconds: ' + str(len(good_indices)))
 
-    experiment_logger = PCGExperimentLogger(path='../results/unet/ph_holdout', name='unet',
+    experiment_logger = PCGExperimentLogger(path='../results/rerun/unet/ph_holdout', name='unet',
                                             number_folders=number_folders)
 
     model = unet_pcg(nch, patch_size)
@@ -52,11 +52,11 @@ def main():
     model.load_weights('random_init_unet')
     indices = np.arange(len(features))
     idx_train, idx_test = train_test_split(indices, test_size=split, random_state=42)
-    # idx_train_ = []
-    # for idx in range(len(idx_train)):
-    #     if not (patient_ids[idx_train[idx]] in patient_ids[idx_test]):
-    #         idx_train_.append(idx_train[idx])
-    # idx_train = np.array(idx_train_)
+    idx_train_ = []
+    for idx in range(len(idx_train)):
+        if not (patient_ids[idx_train[idx]] in patient_ids[idx_test]):
+           idx_train_.append(idx_train[idx])
+    idx_train = np.array(idx_train_)
     X_train, y_train = features[idx_train], labels[idx_train]
     X_dev, y_dev = features[idx_test], labels[idx_test]
 
@@ -155,4 +155,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    with tf.device('/cpu:0'):
+        main()

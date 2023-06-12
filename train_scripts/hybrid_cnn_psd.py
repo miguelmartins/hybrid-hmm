@@ -8,7 +8,7 @@ from data_processing.signal_extraction import DataExtractor
 from data_processing.data_transformation import HybridPCGDataPreparer2D, \
     prepare_validation_data, get_train_test_indices
 from tqdm import tqdm
-from custom_train_functions.hmm_train_step import hmm_train_step, train_HMM_parameters
+from custom_train_functions.hmm_train_step import hmm_train_step, train_HMM_parameters, hmm_train_step_nn_only
 from loss_functions.MMI_losses import CompleteLikelihoodLoss
 from models.custom_models import simple_convnet2d
 from utility_functions.experiment_logs import PCGExperimentLogger
@@ -25,7 +25,7 @@ def main():
 
     good_indices, _, labels, patient_ids, length_sounds = DataExtractor.extract(path='../datasets/PCG'
                                                                                      '/PhysioNet_SpringerFeatures_Annotated_featureFs_50_Hz_audio_ForPython.mat',
-                                                                                patch_size=patch_size)
+                                                                                    patch_size=patch_size)
     features_, _ = DataExtractor.read_physionet_mat('../datasets/PCG/example_data.mat') # TODO: o som original deve ter 20x mais samples
     length_sounds = np.array([len(features_[j]) for j in range(len(features_))])
     features = DataExtractor.filter_by_index(features_, good_indices)
@@ -34,8 +34,8 @@ def main():
                                                 window_length=150,
                                                 window_overlap=130,
                                                 window_type='hann')
-    name = 'hmm_completlikelihood1e3_physio16_psd_joint'
-    experiment_logger = PCGExperimentLogger(path='../results/hybrid', name=name, number_folders=number_folders)
+    name = 'hmm_nnonly_cl_psd_ph16'
+    experiment_logger = PCGExperimentLogger(path='../results/rerun/hybrid/psd', name=name, number_folders=number_folders)
     print('Total number of valid sounds with length > ' + str(patch_size / 50) + ' seconds: ' + str(len(good_indices)))
     # 1) save files on a given directory, maybe experiment-name/date/results
     # 2) save model weights (including random init, maybe  experiment-name/date/checkpoints
@@ -99,7 +99,7 @@ def main():
                                                      output_signature=(
                                                          tf.TensorSpec(shape=(None, patch_size, nch, 1), dtype=tf.float32),
                                                          tf.TensorSpec(shape=(None, 4), dtype=tf.float32))
-                                                     ).cache().prefetch(buffer_size=tf.data.AUTOTUNE)
+                                                     ).prefetch(buffer_size=tf.data.AUTOTUNE)
 
         test_dp = HybridPCGDataPreparer2D(patch_size=patch_size, number_channels=nch, num_states=4)
         test_dp.set_features_and_labels(features_test, labels_test)
@@ -108,7 +108,7 @@ def main():
                                                           tf.TensorSpec(shape=(None, patch_size, nch, 1),
                                                                         dtype=tf.float32),
                                                           tf.TensorSpec(shape=(None, 4), dtype=tf.float32))
-                                                      ).cache().prefetch(buffer_size=tf.data.AUTOTUNE)
+                                                      ).prefetch(buffer_size=tf.data.AUTOTUNE)
 
         # MLE Estimation for HMM
         dataset_np = list(train_dataset.as_numpy_iterator())
@@ -121,7 +121,7 @@ def main():
         for ep in range(num_epochs):
             print('=', end='')
             for i, (x_train, y_train) in tqdm(enumerate(train_dataset), desc=f'training', total=len(X_train), leave=True):
-                hmm_train_step(model=model,
+                hmm_train_step_nn_only(model=model,
                                optimizer=optimizer_nn,
                                loss_object=loss_object,
                                train_batch=x_train,
@@ -192,4 +192,5 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    with tf.device('/cpu:0'):
+        main()

@@ -7,7 +7,7 @@ from data_processing.signal_extraction import DataExtractor, CircorExtractor
 from data_processing.data_transformation import HybridPCGDataPreparer2D, \
      get_train_test_indices
 from tqdm import tqdm
-from custom_train_functions.hmm_train_step import hmm_train_step, train_HMM_parameters
+from custom_train_functions.hmm_train_step import hmm_train_step, train_HMM_parameters, hmm_train_step_nn_only
 from loss_functions.MMI_losses import CompleteLikelihoodLoss
 from models.custom_models import simple_convnet2d
 from utility_functions.experiment_logs import PCGExperimentLogger
@@ -31,8 +31,8 @@ def main():
                                                 window_overlap=130,
                                                 window_type='hann')
 
-    name = 'hmm_completlikelihood1e3_circor_psd_joint'
-    experiment_logger = PCGExperimentLogger(path='../results/hybrid/circor', name=name, number_folders=number_folders)
+    name = 'hmm_nnonly_cl_psd_circor'
+    experiment_logger = PCGExperimentLogger(path='../results/rerun/hybrid/psd', name=name, number_folders=number_folders)
     print('Total number of valid sounds with length > ' + str(patch_size / 50) + ' seconds: ' + str(len(good_indices)))
     # 1) save files on a given directory, maybe experiment-name/date/results
     # 2) save model weights (including random init, maybe  experiment-name/date/checkpoints
@@ -45,7 +45,7 @@ def main():
     model.save_weights('random_init')  # Save initialization before training
 
     acc_folds, prec_folds = [], []
-    for j_fold in range(1, number_folders):
+    for j_fold in range(number_folders):
         min_val_loss = 1e100
         model.load_weights('random_init')  # Load random weights f.e. fold
         train_indices, test_indices = get_train_test_indices(good_indices=good_indices,
@@ -83,7 +83,7 @@ def main():
                                                            tf.TensorSpec(shape=(None, patch_size, nch, 1),
                                                                          dtype=tf.float32),
                                                            tf.TensorSpec(shape=(None, 4), dtype=tf.float32))
-                                                       ).prefetch(buffer_size=tf.data.AUTOTUNE)
+                                                       )
         dev_dp = HybridPCGDataPreparer2D(patch_size=patch_size, number_channels=nch, num_states=4)
         dev_dp.set_features_and_labels(X_dev, y_dev)
         dev_dataset = tf.data.Dataset.from_generator(dev_dp,
@@ -91,7 +91,7 @@ def main():
                                                          tf.TensorSpec(shape=(None, patch_size, nch, 1),
                                                                        dtype=tf.float32),
                                                          tf.TensorSpec(shape=(None, 4), dtype=tf.float32))
-                                                     ).prefetch(buffer_size=tf.data.AUTOTUNE)
+                                                     )
 
         test_dp = HybridPCGDataPreparer2D(patch_size=patch_size, number_channels=nch, num_states=4)
         test_dp.set_features_and_labels(features_test, labels_test)
@@ -100,7 +100,7 @@ def main():
                                                           tf.TensorSpec(shape=(None, patch_size, nch, 1),
                                                                         dtype=tf.float32),
                                                           tf.TensorSpec(shape=(None, 4), dtype=tf.float32))
-                                                      ).prefetch(buffer_size=tf.data.AUTOTUNE)
+                                                      )
 
         # MLE Estimation for HMM
         dataset_np = list(train_dataset.as_numpy_iterator())
@@ -119,14 +119,13 @@ def main():
                 print('=', end='')
                 for i, (x_train, y_train) in tqdm(enumerate(train_dataset), desc=f'training', total=len(X_train),
                                                   leave=True):
-                    hmm_train_step(model=model,
+                    hmm_train_step_nn_only(model=model,
                                    optimizer=optimizer_nn,
                                    loss_object=loss_object,
                                    train_batch=x_train,
                                    label_batch=y_train,
                                    metrics=metrics)
 
-                    print(f"ep: {ep}. Cat accuracy: {metrics[0].result().numpy()}")
 
             # 29500        janela: 150ms    stride: 50ms (overlap=100ms)
             #              stride = 1 / (50hz) = 20 ms /(o intervalo tem que coincidir com o periodo)
@@ -192,4 +191,6 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    with tf.device('/cpu:0'):
+        main()
+

@@ -1,3 +1,5 @@
+import os.path
+
 import numpy as np
 import tensorflow as tf
 
@@ -23,11 +25,11 @@ def main():
     patch_size = 64
     n_mfcc = 6
     nch = n_mfcc * 3
-    num_epochs = 2
+    num_epochs = 50
     number_folders = 1
     learning_rate = 0.002
     batch_size = 32
-    split = .2
+    split = .1
 
     good_indices, _, labels, patient_ids, length_sounds = DataExtractor.extract(path='../datasets/PCG'
                                                                                      '/PhysioNet_SpringerFeatures_Annotated_featureFs_50_Hz_audio_ForPython.mat',
@@ -42,7 +44,7 @@ def main():
                                        window_overlap=130,
                                        n_mfcc=6)
     name = 'fernando_CE_physio16_mfcc_joint'
-    experiment_logger = PCGExperimentLogger(path='../results/fernando/ph_holdout', name=name, number_folders=number_folders)
+    experiment_logger = PCGExperimentLogger(path='../results/rerun/fernando/ph_holdout', name=name, number_folders=number_folders)
     print('Total number of valid sounds with length > ' + str(patch_size / 50) + ' seconds: ' + str(len(good_indices)))
     # 1) save files on a given directory, maybe experiment-name/date/results
     # 2) save model weights (including random init, maybe  experiment-name/date/checkpoints
@@ -56,15 +58,14 @@ def main():
     min_val_loss = 1e3
     model.load_weights('random_init_lstm_attention')  # Load random weights f.e. fold
     indices = np.arange(len(features))
-    idx_train, idx_test = train_test_split(indices, test_size=split, random_state=42)
-    print("split", len(idx_train), len(idx_test))
-    idx_train_ = []
-    for idx in idx_train:
-        if patient_ids[idx] not in patient_ids[idx_test]:
-            idx_train_.append(idx)
-    idx_train = np.array(idx_train_)
+    idx_train, idx_test = get_train_test_indices(good_indices=good_indices,
+                                                 number_folders=10,
+                                                 patient_ids=patient_ids,
+                                                 fold=0)
+
     X_train, y_train = features[idx_train], labels[idx_train]
     X_dev, y_dev = features[idx_test], labels[idx_test]
+    idx_train, idx_test = good_indices[idx_train], good_indices[idx_test]
 
     # NORMALIZAR PSD
     # como separar as features para a nossa CNN?
